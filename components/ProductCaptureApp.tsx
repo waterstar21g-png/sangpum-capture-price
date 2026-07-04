@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ProductScoutResult } from '@/lib/itemscout/types';
+import { compressImageToDataUrl } from '@/lib/compress-image';
 import { ViewTrendChart } from './ViewTrendChart';
 import { MarketShortcuts } from './MarketShortcuts';
 import { OverviewChart } from './OverviewChart';
@@ -46,15 +47,6 @@ export function ProductCaptureApp() {
     setVisionInfo(null);
   }
 
-  function readFileAsDataUrl(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = () => reject(new Error('read_failed'));
-      reader.readAsDataURL(file);
-    });
-  }
-
   async function analyze() {
     setError(null);
     setBusy(true);
@@ -71,15 +63,13 @@ export function ProductCaptureApp() {
         };
       } else if (preview) {
         const input = cameraRef.current?.files?.[0] ?? galleryRef.current?.files?.[0];
-        let dataUrl = preview;
+        let source: Blob | string = preview;
         if (input && input.size > 0) {
-          dataUrl = await readFileAsDataUrl(input);
+          source = input;
         } else if (preview.startsWith('blob:')) {
-          const blob = await fetch(preview).then(r => r.blob());
-          dataUrl = await readFileAsDataUrl(
-            new File([blob], 'capture.jpg', { type: blob.type || 'image/jpeg' }),
-          );
+          source = await fetch(preview).then(r => r.blob());
         }
+        const dataUrl = await compressImageToDataUrl(source);
         body = { imageDataUrl: dataUrl, hint: hint.trim() || undefined };
       } else {
         throw new Error('사진을 촬영하거나 키워드를 입력해 주세요.');
@@ -90,7 +80,7 @@ export function ProductCaptureApp() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      const data = (await res.json()) as AnalyzeResponse;
+      const data = await parseAnalyzeResponse(res);
       if (!res.ok || !data.ok || !data.scout) {
         throw new Error(data.message ?? '분석에 실패했습니다.');
       }
@@ -342,6 +332,22 @@ export function ProductCaptureApp() {
       </footer>
     </div>
   );
+}
+
+async function parseAnalyzeResponse(res: Response): Promise<AnalyzeResponse> {
+  const text = await res.text();
+  try {
+    return JSON.parse(text) as AnalyzeResponse;
+  } catch {
+    const lower = text.slice(0, 80).toLowerCase();
+    if (res.status === 413 || lower.includes('request entity') || lower.includes('too large')) {
+      throw new Error('이미지가 너무 큽니다. 더 작은 사진을 사용하거나 키워드로 조회해 주세요.');
+    }
+    if (res.status >= 500) {
+      throw new Error('서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
+    }
+    throw new Error('서버 응답을 처리할 수 없습니다. 잠시 후 다시 시도해 주세요.');
+  }
 }
 
 function fmt(n: number) {

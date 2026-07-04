@@ -4,7 +4,8 @@ import { analyzeProductImage } from '@/lib/product-vision';
 
 export const dynamic = 'force-dynamic';
 
-const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+/** Vercel body limit(~4.5MB) 고려 — base64 포함 JSON 여유 */
+const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 
 function parseDataUrl(dataUrl: string): { mime: string; bytes: number } | null {
   const m = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
@@ -54,8 +55,12 @@ export async function POST(req: NextRequest) {
     }
     if (parsed.bytes > MAX_IMAGE_BYTES) {
       return NextResponse.json(
-        { ok: false, code: 'image_too_large', message: '이미지 크기는 8MB 이하여야 합니다.' },
-        { status: 400 },
+        {
+          ok: false,
+          code: 'image_too_large',
+          message: '이미지가 너무 큽니다. 더 작은 사진을 사용하거나 키워드로 조회해 주세요.',
+        },
+        { status: 413 },
       );
     }
 
