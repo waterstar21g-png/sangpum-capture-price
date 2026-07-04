@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ProductScoutResult } from '@/lib/itemscout/types';
 import { ViewTrendChart } from './ViewTrendChart';
+import { MarketShortcuts } from './MarketShortcuts';
+import { OverviewChart } from './OverviewChart';
+import { RatioBars } from './RatioBars';
 
 type Step = 'capture' | 'analyzing' | 'result';
 
@@ -207,29 +210,71 @@ export function ProductCaptureApp() {
               {result.category && <span className="result__cat"> · {result.category}</span>}
             </p>
 
+            <MarketShortcuts keyword={result.keyword} />
+
+            <article className="card">
+              <h3 className="card__title">상품 경쟁강도 정보</h3>
+              <div className="channel-grid">
+                {(result.competitionByChannel ?? []).map(ch => (
+                  <div key={ch.channel} className="channel-card">
+                    <h4 className="channel-card__name">{ch.label}</h4>
+                    <dl className="channel-stats">
+                      <div>
+                        <dt>상품수</dt>
+                        <dd>{fmt(ch.productCount)}개</dd>
+                      </div>
+                      <div>
+                        <dt>한 달 검색수</dt>
+                        <dd>{fmt(ch.monthlySearches)}회</dd>
+                      </div>
+                      <div>
+                        <dt>경쟁강도</dt>
+                        <dd>
+                          <span className="channel-stats__intensity">{ch.intensity.toFixed(2)}</span>
+                          <span className="channel-stats__label">{ch.intensityLabel}</span>
+                        </dd>
+                      </div>
+                    </dl>
+                    <div className="competition">
+                      <div className="competition__track">
+                        <div
+                          className="competition__fill"
+                          style={{ width: `${Math.min(100, ch.intensity * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </article>
+
+            <article className="card">
+              <h3 className="card__title">종합 차트</h3>
+              <OverviewChart data={result.overviewChart ?? []} />
+            </article>
+
+            <div className="ratio-grid">
+              <article className="card">
+                <h3 className="card__title">성별 클릭 비율</h3>
+                <RatioBars
+                  data={result.genderClickRatio ?? []}
+                  colors={['#2563eb', '#db2777']}
+                />
+              </article>
+              <article className="card">
+                <h3 className="card__title">연령별 클릭 비율</h3>
+                <RatioBars data={result.ageClickRatio ?? []} />
+              </article>
+            </div>
+
             <div className="metrics">
               <div className="metric">
                 <span className="metric__label">1주 조회수</span>
                 <span className="metric__value">{fmt(result.weeklyViews)}</span>
               </div>
               <div className="metric">
-                <span className="metric__label">경쟁 상품수</span>
-                <span className="metric__value">{fmt(result.competingProducts)}</span>
-              </div>
-              <div className="metric">
                 <span className="metric__label">1주 판매량</span>
                 <span className="metric__value">{fmt(result.weeklySales)}</span>
-              </div>
-              <div className="metric metric--wide">
-                <span className="metric__label">경쟁 강도</span>
-                <div className="competition">
-                  <div className="competition__track">
-                    <div className="competition__fill" style={{ width: `${result.competitionIntensity}%` }} />
-                  </div>
-                  <span className="competition__text">
-                    {result.competitionLabel} ({result.competitionIntensity})
-                  </span>
-                </div>
               </div>
             </div>
 
@@ -239,7 +284,8 @@ export function ProductCaptureApp() {
             </article>
 
             <article className="card">
-              <h3 className="card__title">시중판매 최저가격</h3>
+              <h3 className="card__title">가격비교 정보</h3>
+              <p className="card__hint">동일상품 대비 최소 5개 사이트</p>
               {result.lowestPrices.length ? (
                 <ol className="price-list">
                   {result.lowestPrices.map(item => (
@@ -249,12 +295,23 @@ export function ProductCaptureApp() {
                         <span className="price-item__name">{item.productName}</span>
                         <span className="price-item__mall">{item.mallName}</span>
                       </div>
-                      <span className="price-item__price">{fmtPrice(item.price)}</span>
+                      {item.url ? (
+                        <a
+                          href={item.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="price-item__price price-item__price--link"
+                        >
+                          {fmtPrice(item.price)}
+                        </a>
+                      ) : (
+                        <span className="price-item__price">{fmtPrice(item.price)}</span>
+                      )}
                     </li>
                   ))}
                 </ol>
               ) : (
-                <p className="muted">최저가 데이터가 없습니다.</p>
+                <p className="muted">가격비교 데이터가 없습니다.</p>
               )}
             </article>
 

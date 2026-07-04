@@ -150,6 +150,93 @@ img { max-width: 100%; height: auto; display: block; }
   border-radius: 14px; padding: 1rem;
 }
 .card__title { margin: 0 0 0.7rem; font-size: 0.9375rem; font-weight: 800; }
+.card__hint { margin: -0.4rem 0 0.7rem; font-size: 0.75rem; color: var(--muted); }
+
+/* 바로가기 */
+.shortcuts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.55rem;
+}
+.shortcut {
+  display: flex; flex-direction: column; align-items: center; gap: 0.35rem;
+  padding: 0.55rem 0.25rem; border-radius: 12px;
+  border: 1px solid var(--border); background: #f8fafc;
+  color: var(--text); text-decoration: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.shortcut:hover {
+  border-color: #94a3b8;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+}
+.shortcut__icon {
+  width: 2.25rem; height: 2.25rem; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 0.75rem; font-weight: 800;
+}
+.shortcut__label {
+  font-size: 0.6875rem; font-weight: 700; text-align: center;
+  line-height: 1.25; word-break: keep-all;
+}
+
+/* 채널별 경쟁강도 */
+.channel-grid { display: grid; grid-template-columns: 1fr; gap: 0.65rem; }
+@media (min-width: 400px) {
+  .channel-grid { grid-template-columns: 1fr 1fr; }
+}
+.channel-card {
+  border: 1px solid var(--border); border-radius: 12px;
+  padding: 0.75rem; background: #f8fafc;
+}
+.channel-card__name {
+  margin: 0 0 0.55rem; font-size: 0.875rem; font-weight: 800;
+  color: var(--primary);
+}
+.channel-stats { margin: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.channel-stats > div {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem;
+}
+.channel-stats dt { margin: 0; font-size: 0.6875rem; color: var(--muted); font-weight: 700; }
+.channel-stats dd { margin: 0; font-size: 0.875rem; font-weight: 800; text-align: right; }
+.channel-stats__intensity { color: var(--accent); }
+.channel-stats__label {
+  display: block; font-size: 0.625rem; font-weight: 700;
+  color: var(--muted); margin-top: 0.1rem;
+}
+
+/* 종합 차트 */
+.overview-bar--search { fill: #2563eb; }
+.overview-bar--click { fill: #ea580c; }
+.chart-legend {
+  display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: center;
+  margin-top: 0.35rem; font-size: 0.75rem; font-weight: 700; color: var(--muted);
+}
+.chart-legend__item { display: inline-flex; align-items: center; gap: 0.3rem; }
+.chart-legend__swatch {
+  display: inline-block; width: 0.65rem; height: 0.65rem; border-radius: 2px;
+}
+.chart-legend__swatch--search { background: #2563eb; }
+.chart-legend__swatch--click { background: #ea580c; }
+
+/* 성별·연령 비율 */
+.ratio-grid { display: grid; grid-template-columns: 1fr; gap: 0.85rem; }
+@media (min-width: 480px) {
+  .ratio-grid { grid-template-columns: 1fr 1fr; }
+}
+.ratio-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.ratio-row__head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: 0.2rem;
+}
+.ratio-row__label { font-size: 0.75rem; font-weight: 700; }
+.ratio-row__pct { font-size: 0.75rem; font-weight: 800; color: var(--primary); }
+.ratio-row__track {
+  height: 8px; border-radius: 999px; background: #e2e8f0; overflow: hidden;
+}
+.ratio-row__fill { height: 100%; border-radius: 999px; }
+
+.price-item__price--link { color: var(--accent); text-decoration: none; }
+.price-item__price--link:hover { text-decoration: underline; }
 
 /* 차트 */
 .trend-chart { width: 100%; height: auto; display: block; }
