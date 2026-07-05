@@ -38,6 +38,7 @@ export function ProductCaptureApp() {
     recordSuccessfulAnalysis,
   } = usePersistedInputs();
   const [result, setResult] = useState<ProductScoutResult | null>(null);
+  const [originalProductName, setOriginalProductName] = useState<string | null>(null);
   const [visionInfo, setVisionInfo] = useState<AnalyzeResponse['vision'] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [kiwiHint, setKiwiHint] = useState<string | null>(null);
@@ -73,6 +74,7 @@ export function ProductCaptureApp() {
     clearExcept('image');
     setError(null);
     setResult(null);
+    setOriginalProductName(null);
     setVisionInfo(null);
     try {
       const [dataUrl, thumb] = await Promise.all([
@@ -105,7 +107,23 @@ export function ProductCaptureApp() {
     queueTextSearch(value);
   }
 
+  function commitKeywordSearch(text: string) {
+    if (textTimerRef.current) clearTimeout(textTimerRef.current);
+    const trimmed = text.trim();
+    if (!trimmed || busy) return;
+    const entry = searchHistory.find(e => (e.productName || e.keyword).trim() === trimmed);
+    if (entry) {
+      onPickHistoryEntry(entry);
+      return;
+    }
+    clearExcept('keyword');
+    setManualKeyword(trimmed);
+    void searchByText(trimmed);
+  }
+
   function onPickHistoryEntry(entry: SearchHistoryEntry) {
+    if (textTimerRef.current) clearTimeout(textTimerRef.current);
+    skipKeywordEffectsRef.current = true;
     const text = (entry.productName || entry.keyword).trim();
     const imgSrc = entryImageSrc(entry);
     if (imgSrc) {
@@ -116,13 +134,13 @@ export function ProductCaptureApp() {
       setPreview(imgSrc);
       setSearchImageUrl(imgSrc);
       setImageThumb(imgSrc);
-      if (text) void searchByText(text, imgSrc, imgSrc, entry.imageId, entry.imageUrl);
+      if (text) void searchByText(text, imgSrc, imgSrc, entry.imageId, entry.imageUrl, text);
       return;
     }
     clearExcept('keyword');
     if (entry.hint) setHint(entry.hint);
     applyKeywordValue(text);
-    if (text) void searchByText(text);
+    if (text) void searchByText(text, undefined, undefined, undefined, undefined, text);
   }
 
   function queueTextSearch(text: string) {
@@ -135,6 +153,7 @@ export function ProductCaptureApp() {
   async function searchByImage(dataUrl: string, thumb: string) {
     setError(null);
     setResult(null);
+    setOriginalProductName(null);
     setVisionInfo(null);
     setBusy(true);
     try {
@@ -157,7 +176,10 @@ export function ProductCaptureApp() {
     displayImageUrl?: string,
     keepImageId?: string,
     keepImageUrl?: string,
+    originalName?: string,
   ) {
+    const trimmed = text.trim();
+    const pendingOriginal = originalName?.trim() || trimmed;
     setError(null);
     setResult(null);
     setVisionInfo(null);
@@ -190,8 +212,9 @@ export function ProductCaptureApp() {
               displayImageUrl,
               imageId: keepImageId,
               imageUrl: keepImageUrl,
+              originalProductName: pendingOriginal,
             }
-          : undefined,
+          : { originalProductName: pendingOriginal },
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : '분석에 실패했습니다.');
@@ -208,6 +231,7 @@ export function ProductCaptureApp() {
       imageId?: string;
       imageUrl?: string;
       hint?: string;
+      originalProductName?: string;
     },
   ) {
     const data = await parseAnalyzeResponse(res);
@@ -237,12 +261,17 @@ export function ProductCaptureApp() {
       setSearchImageUrl(displayUrl);
     }
     if (thumb) setImageThumb(thumb);
+    const original =
+      options?.originalProductName?.trim() ||
+      data.vision?.productName?.trim() ||
+      data.scout.productName;
+    setOriginalProductName(original);
     setResult(data.scout);
     setVisionInfo(data.vision ?? null);
     applyKeywordValue(data.scout.productName);
     recordSuccessfulAnalysis({
-      keyword: data.scout.productName,
-      productName: data.scout.productName,
+      keyword: data.scout.keyword || original,
+      productName: original,
       hint: options?.hint,
       imageThumb: imageUrl ? undefined : thumb,
       imageId,
@@ -257,6 +286,7 @@ export function ProductCaptureApp() {
     setHint('');
     setManualKeyword('');
     setResult(null);
+    setOriginalProductName(null);
     setVisionInfo(null);
     setError(null);
     setKiwiHint(null);
@@ -316,6 +346,7 @@ export function ProductCaptureApp() {
             disabled={busy}
             searchHistory={searchHistory}
             onPickEntry={onPickHistoryEntry}
+            onCommitSearch={commitKeywordSearch}
           />
 
           {error && <p className="alert" role="alert">{error}</p>}
@@ -377,6 +408,7 @@ export function ProductCaptureApp() {
             <MarketShortcuts
               productName={result.productName}
               keyword={result.keyword}
+              copyProductName={originalProductName ?? result.productName}
               naverProductCount={
                 result.itemscoutMetricsAvailable
                   ? result.competitionByChannel?.find(c => c.channel === 'naver')?.productCount

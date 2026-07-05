@@ -48,6 +48,7 @@ export function PersistedHintInput(props: Props) {
 interface KeywordProps extends Props {
   searchHistory: SearchHistoryEntry[];
   onPickEntry: (entry: SearchHistoryEntry) => void;
+  onCommitSearch: (text: string) => void;
 }
 
 /** 키워드 직접 입력 + 통합 최근 검색 이력 */
@@ -60,9 +61,16 @@ export function PersistedKeywordInput({
   disabled,
   searchHistory,
   onPickEntry,
+  onCommitSearch,
 }: KeywordProps) {
   const listId = `${id}-history-list`;
   const datalistValues = searchHistory.map(e => e.productName || e.keyword);
+
+  function findHistoryMatch(text: string): SearchHistoryEntry | undefined {
+    const trimmed = text.trim();
+    if (!trimmed) return undefined;
+    return searchHistory.find(e => (e.productName || e.keyword).trim() === trimmed);
+  }
 
   return (
     <div className="field field--persisted">
@@ -76,6 +84,16 @@ export function PersistedKeywordInput({
         enterKeyHint="search"
         value={value}
         onChange={e => onChange(e.target.value)}
+        onInput={e => {
+          const hit = findHistoryMatch(e.currentTarget.value);
+          if (hit) onPickEntry(hit);
+        }}
+        onKeyDown={e => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            onCommitSearch(value);
+          }
+        }}
         placeholder={placeholder}
         disabled={disabled}
         list={datalistValues.length ? listId : undefined}
@@ -122,7 +140,13 @@ function SearchHistoryList({
         <ul className="input-history__list input-history__list--rich" role="list">
           {items.map(entry => (
             <li key={`${entry.searchedAt}-${entryDedupeKey(entry)}`}>
-              <button type="button" className="input-history__chip-rich" onClick={() => onPick(entry)}>
+              <button
+                type="button"
+                className="input-history__chip-rich"
+                onClick={() => {
+                  onPick(entry);
+                }}
+              >
                 <span className="input-history__chip-body">
                   <span className="input-history__name">{entry.productName}</span>
                   {entry.keyword !== entry.productName && (

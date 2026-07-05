@@ -6,7 +6,6 @@ import {
   shortcutSearchText,
   type ShortcutQuery,
 } from '@/lib/market-shortcuts';
-import { clipItemscoutKeyword } from '@/lib/itemscout/resolve-keyword';
 import { copyProductNameForPaste, openItemscoutInKiwi } from '@/lib/itemscout/open-keyword';
 import { openCoupangSearch } from '@/lib/coupang-app';
 import { openNaverShoppingSearch } from '@/lib/naver-shopping-app';
@@ -16,6 +15,8 @@ import type { NaverShopListing } from '@/lib/naver-shopping';
 interface Props {
   productName: string;
   keyword: string;
+  /** 복사용 원본 상품명 — 변형·잘림 없음 */
+  copyProductName?: string;
   /** 네이버 채널 경쟁강도 (키워드 분석 패널) */
   naverProductCount?: number;
   naverMonthlySearches?: number;
@@ -25,6 +26,7 @@ interface Props {
 export function MarketShortcuts({
   productName,
   keyword,
+  copyProductName,
   naverProductCount,
   naverMonthlySearches,
   naverIntensity,
@@ -34,7 +36,7 @@ export function MarketShortcuts({
     keyword: keyword.trim(),
   };
   const searchText = shortcutSearchText(q);
-  const pasteText = clipItemscoutKeyword(searchText);
+  const pasteText = (copyProductName ?? productName).trim() || keyword.trim();
   const [busy, setBusy] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
   const [copiedReady, setCopiedReady] = useState(false);
@@ -51,7 +53,7 @@ export function MarketShortcuts({
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { copied } = await copyProductNameForPaste(productName, keyword);
+      const { copied } = await copyProductNameForPaste(pasteText, keyword);
       if (!cancelled) {
         setCopiedReady(copied);
         if (copied) {
@@ -128,7 +130,7 @@ export function MarketShortcuts({
   }
 
   async function copyOnly() {
-    const { text, copied } = await copyProductNameForPaste(productName, keyword);
+    const { text, copied } = await copyProductNameForPaste(pasteText, keyword);
     setCopiedReady(copied);
     setHint(
       copied

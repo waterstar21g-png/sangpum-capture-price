@@ -20,8 +20,10 @@ export interface OpenItemscoutResult {
 export async function copyProductNameForPaste(
   productName: string,
   keyword?: string,
+  options?: { clipForItemscout?: boolean },
 ): Promise<{ text: string; copied: boolean }> {
-  const text = clipItemscoutKeyword(productName) || clipItemscoutKeyword(keyword ?? '');
+  const raw = (productName || keyword || '').trim();
+  const text = options?.clipForItemscout ? clipItemscoutKeyword(raw) : raw;
   if (!text) return { text: '', copied: false };
 
   try {
