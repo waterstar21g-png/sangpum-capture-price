@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ProductScoutResult } from '@/lib/itemscout/types';
 import type { SearchHistoryEntry } from '@/lib/input-history';
 import { compressImageToDataUrl } from '@/lib/compress-image';
+import { findProductImage, saveProductImage } from '@/lib/product-image-store';
 import { ViewTrendChart } from './ViewTrendChart';
 import { MarketShortcuts } from './MarketShortcuts';
 import { OverviewChart } from './OverviewChart';
@@ -28,6 +29,8 @@ export function ProductCaptureApp() {
   const galleryRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<Step>('capture');
   const [preview, setPreview] = useState<string | null>(null);
+  const [resultImageUrl, setResultImageUrl] = useState<string | null>(null);
+  const pendingImageDataUrlRef = useRef<string | null>(null);
   const {
     hint,
     setHint,
@@ -108,6 +111,7 @@ export function ProductCaptureApp() {
     setStep('analyzing');
     try {
       const dataUrl = await compressImageToDataUrl(file);
+      pendingImageDataUrlRef.current = dataUrl;
       const res = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -115,6 +119,7 @@ export function ProductCaptureApp() {
       });
       await finishSearch(res);
     } catch (e) {
+      pendingImageDataUrlRef.current = null;
       setError(e instanceof Error ? e.message : '분석에 실패했습니다.');
       setStep('capture');
     } finally {
@@ -123,6 +128,7 @@ export function ProductCaptureApp() {
   }
 
   async function searchByText(text: string) {
+    pendingImageDataUrlRef.current = null;
     setError(null);
     setBusy(true);
     setStep('analyzing');
@@ -158,6 +164,18 @@ export function ProductCaptureApp() {
       keyword: data.scout.productName,
       productName: data.scout.productName,
     });
+
+    const productName = data.scout.productName;
+    let imageUrl: string | null = null;
+    if (pendingImageDataUrlRef.current) {
+      const dataUrl = pendingImageDataUrlRef.current;
+      pendingImageDataUrlRef.current = null;
+      await saveProductImage(productName, dataUrl);
+      imageUrl = dataUrl;
+    } else {
+      imageUrl = await findProductImage(productName);
+    }
+    setResultImageUrl(imageUrl);
     setStep('result');
   }
 
@@ -170,6 +188,8 @@ export function ProductCaptureApp() {
     setVisionInfo(null);
     setError(null);
     setKiwiHint(null);
+    setResultImageUrl(null);
+    pendingImageDataUrlRef.current = null;
     setStep('capture');
     if (cameraRef.current) cameraRef.current.value = '';
     if (galleryRef.current) galleryRef.current.value = '';
@@ -292,7 +312,7 @@ export function ProductCaptureApp() {
             <MarketShortcuts
               productName={result.productName}
               keyword={result.keyword}
-              capturedImageUrl={preview}
+              capturedImageUrl={resultImageUrl}
               naverProductCount={
                 result.itemscoutMetricsAvailable
                   ? result.competitionByChannel?.find(c => c.channel === 'naver')?.productCount
