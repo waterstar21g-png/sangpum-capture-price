@@ -143,12 +143,23 @@ img { max-width: 100%; height: auto; display: block; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .input-history__chip:hover { border-color: #94a3b8; background: #fff; }
-.input-history__list--rich { flex-direction: column; max-height: 220px; }
+.input-history__scroll-hint { font-weight: 500; opacity: 0.85; }
+.input-history__list--scroll {
+  max-height: calc(var(--history-row-height, 3.35rem) * var(--history-scroll-rows, 5));
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.input-history__list--rich { flex-direction: column; }
 .input-history__chip-rich {
   display: flex; flex-direction: row; align-items: center; gap: 0.55rem;
   width: 100%; text-align: left; padding: 0.45rem 0.6rem; border-radius: 10px;
   border: 1px solid var(--border); background: #f8fafc; cursor: pointer;
   font: inherit; color: var(--text);
+  min-height: var(--history-row-height, 3.35rem);
+  flex-shrink: 0;
 }
 .input-history__thumb {
   width: 44px; height: 44px; border-radius: 8px; object-fit: cover;

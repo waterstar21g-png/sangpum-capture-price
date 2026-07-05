@@ -7,7 +7,7 @@ import {
   pushSearchHistory,
   mergeSearchHistoryWithDb,
   saveSearchHistory,
-  MAX_HISTORY,
+  HISTORY_SCROLL_ROWS,
   type SearchHistoryEntry,
 } from '@/lib/input-history';
 import { fetchSessionSearchImages } from '@/lib/search-image-client';
@@ -122,7 +122,7 @@ function SearchHistoryList({
   items: SearchHistoryEntry[];
   onPick: (entry: SearchHistoryEntry) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
 
   return (
     <div className="input-history">
@@ -133,11 +133,15 @@ function SearchHistoryList({
         aria-expanded={open}
       >
         최근 검색 {items.length}건
-        {items.length >= MAX_HISTORY ? ` (최대 ${MAX_HISTORY})` : ''}
+        <span className="input-history__scroll-hint"> · 5건씩 스크롤</span>
         <span aria-hidden>{open ? ' ▲' : ' ▼'}</span>
       </button>
       {open && (
-        <ul className="input-history__list input-history__list--rich" role="list">
+        <ul
+          className="input-history__list input-history__list--rich input-history__list--scroll"
+          role="list"
+          style={{ ['--history-scroll-rows' as string]: HISTORY_SCROLL_ROWS }}
+        >
           {items.map(entry => (
             <li key={`${entry.searchedAt}-${entryDedupeKey(entry)}`}>
               <button

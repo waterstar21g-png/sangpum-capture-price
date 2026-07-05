@@ -11,6 +11,7 @@ import { RatioBars } from './RatioBars';
 import { PriceComparePanel } from './PriceComparePanel';
 import { openItemscoutInKiwi } from '@/lib/itemscout/open-keyword';
 import { isAndroidDevice } from '@/lib/kiwi-browser';
+import { saveCaptureToGallery } from '@/lib/save-capture-gallery';
 import { entryImageSrc, persistSearchImageToDb } from '@/lib/search-image-client';
 import { PersistedHintInput, PersistedKeywordInput, usePersistedInputs } from './PersistedInput';
 
@@ -42,6 +43,7 @@ export function ProductCaptureApp() {
   const [visionInfo, setVisionInfo] = useState<AnalyzeResponse['vision'] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [kiwiHint, setKiwiHint] = useState<string | null>(null);
+  const [galleryHint, setGalleryHint] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const textTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skipKeywordEffectsRef = useRef(false);
@@ -66,17 +68,22 @@ export function ProductCaptureApp() {
     setManualKeyword(value);
   }
 
-  async function onPickFile(file: File | undefined) {
+  async function onPickFile(file: File | undefined, fromCamera: boolean) {
     if (!file || !file.type.startsWith('image/')) {
       setError('이미지 파일만 선택할 수 있습니다.');
       return;
     }
     clearExcept('image');
     setError(null);
+    setGalleryHint(null);
     setResult(null);
     setOriginalProductName(null);
     setVisionInfo(null);
     try {
+      if (fromCamera) {
+        const saved = await saveCaptureToGallery(file);
+        if (saved.message) setGalleryHint(saved.message);
+      }
       const [dataUrl, thumb] = await Promise.all([
         compressImageToDataUrl(file),
         compressImageToThumbnail(file),
@@ -290,6 +297,7 @@ export function ProductCaptureApp() {
     setVisionInfo(null);
     setError(null);
     setKiwiHint(null);
+    setGalleryHint(null);
     if (cameraRef.current) cameraRef.current.value = '';
     if (galleryRef.current) galleryRef.current.value = '';
   }
@@ -323,8 +331,8 @@ export function ProductCaptureApp() {
             </button>
           </div>
 
-          <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="sr-only" aria-label="카메라 촬영" onChange={e => onPickFile(e.target.files?.[0])} />
-          <input ref={galleryRef} type="file" accept="image/*" className="sr-only" aria-label="갤러리 선택" onChange={e => onPickFile(e.target.files?.[0])} />
+          <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="sr-only" aria-label="카메라 촬영" onChange={e => { void onPickFile(e.target.files?.[0], true); e.target.value = ''; }} />
+          <input ref={galleryRef} type="file" accept="image/*" className="sr-only" aria-label="갤러리 선택" onChange={e => { void onPickFile(e.target.files?.[0], false); e.target.value = ''; }} />
 
           <PersistedHintInput
             id="product-hint"
@@ -350,6 +358,7 @@ export function ProductCaptureApp() {
           />
 
           {error && <p className="alert" role="alert">{error}</p>}
+          {galleryHint && <p className="notice" role="status">{galleryHint}</p>}
 
           <div className="capture-box capture-box--footer">
             {(preview || searchImageUrl) ? (

@@ -1,5 +1,6 @@
 const STORAGE_KEY = 'sangpum-capture:input-store';
-const MAX_HISTORY = 50;
+/** 검색 이력 UI — 한 화면에 보이는 행 수 */
+export const HISTORY_SCROLL_ROWS = 5;
 
 /** 최근 검색 1건 — 키워드 + 상품명(full name) + 힌트 + 썸네일 */
 export interface SearchHistoryEntry {
@@ -69,8 +70,7 @@ function migrateLegacy(parsed: Partial<InputStore>): SearchHistoryEntry[] {
   if (Array.isArray(parsed.searchHistory) && parsed.searchHistory.length) {
     return parsed.searchHistory
       .map(sanitizeEntry)
-      .filter((e): e is SearchHistoryEntry => e != null)
-      .slice(0, MAX_HISTORY);
+      .filter((e): e is SearchHistoryEntry => e != null);
   }
 
   const entries: SearchHistoryEntry[] = [];
@@ -97,7 +97,7 @@ function migrateLegacy(parsed: Partial<InputStore>): SearchHistoryEntry[] {
     add(h, h, h);
   }
 
-  return entries.slice(0, MAX_HISTORY);
+  return entries;
 }
 
 function sanitizeStringList(raw: unknown): string[] {
@@ -137,7 +137,7 @@ function writeStore(store: InputStore): void {
       JSON.stringify({
         hint: store.hint,
         keyword: store.keyword,
-        searchHistory: store.searchHistory.slice(0, MAX_HISTORY).map(slimEntryForStorage),
+        searchHistory: store.searchHistory.map(slimEntryForStorage),
       }),
     );
   } catch {
@@ -147,7 +147,7 @@ function writeStore(store: InputStore): void {
 
 export function saveSearchHistory(history: SearchHistoryEntry[]): void {
   const store = readStore();
-  writeStore({ ...store, searchHistory: history.slice(0, MAX_HISTORY) });
+  writeStore({ ...store, searchHistory: history });
 }
 
 export function loadInputStore(): InputStore {
@@ -186,7 +186,7 @@ export function pushSearchHistory(entry: {
   const store = readStore();
   const key = entryDedupeKey(newEntry);
   const rest = store.searchHistory.filter(e => entryDedupeKey(e) !== key);
-  const next = [newEntry, ...rest].slice(0, MAX_HISTORY);
+  const next = [newEntry, ...rest];
   writeStore({ ...store, searchHistory: next });
   return next;
 }
@@ -215,7 +215,7 @@ export function mergeSearchHistoryWithDb(
       map.set(key, entry);
     }
   }
-  return [...map.values()].sort((a, b) => b.searchedAt.localeCompare(a.searchedAt)).slice(0, MAX_HISTORY);
+  return [...map.values()].sort((a, b) => b.searchedAt.localeCompare(a.searchedAt));
 }
 
 /** @deprecated — pushSearchHistory 사용 */
@@ -229,4 +229,3 @@ export function pushInputHistory(kind: 'hint' | 'keyword', value: string): void 
   }
 }
 
-export { MAX_HISTORY };
