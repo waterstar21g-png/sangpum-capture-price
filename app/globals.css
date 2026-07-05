@@ -92,6 +92,12 @@ img { max-width: 100%; height: auto; display: block; }
 }
 .capture-box__clear:disabled { opacity: 0.5; cursor: not-allowed; }
 .capture-box__img { width: 100%; max-height: 300px; object-fit: contain; }
+.capture-box__selected {
+  text-align: center; color: var(--muted); padding: 2rem 1.25rem;
+}
+.capture-box__selected span { font-size: 2.75rem; display: block; margin-bottom: 0.5rem; }
+.capture-box__selected p { margin: 0; font-size: 0.875rem; line-height: 1.5; }
+.capture-box__selected-hint { margin-top: 0.35rem !important; font-size: 0.75rem !important; opacity: 0.85; }
 .capture-box__empty { text-align: center; color: var(--muted); padding: 2rem; }
 .capture-box__empty span { font-size: 2.75rem; display: block; margin-bottom: 0.5rem; }
 .capture-box__empty p { margin: 0; font-size: 0.875rem; line-height: 1.5; }
@@ -272,12 +278,36 @@ button.shortcut--btn:disabled { opacity: 0.55; cursor: wait; }
   color: var(--text); background: #fff; border-radius: 8px;
   border: 1px dashed #c4b5fd; word-break: break-all;
 }
+.paste-ready__actions {
+  display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap;
+}
 .paste-ready__btn {
   font: inherit; font-size: 0.75rem; font-weight: 700;
   padding: 0.35rem 0.65rem; border-radius: 8px; cursor: pointer;
   border: 1px solid #c4b5fd; background: #fff; color: #5b21b6;
 }
 .paste-ready__btn:hover { background: #ede9fe; }
+.paste-ready__toggle {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  font: inherit; font-size: 0.75rem; font-weight: 700;
+  padding: 0.35rem 0.55rem; border-radius: 8px; cursor: pointer;
+  border: 1px solid #c4b5fd; background: #fff; color: #5b21b6;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.paste-ready__toggle:hover { background: #ede9fe; }
+.paste-ready__toggle--on {
+  background: #7c3aed; border-color: #6d28d9; color: #fff;
+}
+.paste-ready__toggle--on:hover { background: #6d28d9; }
+.paste-ready__toggle-icon { font-size: 0.95rem; line-height: 1; }
+.paste-ready__toggle-label { line-height: 1.2; }
+.paste-ready__image {
+  margin-top: 0.55rem; border-radius: 10px; overflow: hidden;
+  border: 1px solid #ddd6fe; background: #fff;
+}
+.paste-ready__image-img {
+  display: block; width: 100%; max-height: 280px; object-fit: contain;
+}
 .shortcut__icon {
   width: 2.25rem; height: 2.25rem; border-radius: 10px;
   display: flex; align-items: center; justify-content: center;

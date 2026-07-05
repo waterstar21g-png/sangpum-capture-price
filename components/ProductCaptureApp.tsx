@@ -198,7 +198,11 @@ export function ProductCaptureApp() {
             <div className="capture-box">
               {preview ? (
                 <>
-                  <img src={preview} alt="선택한 상품" className="capture-box__img" />
+                  <div className="capture-box__selected" aria-live="polite">
+                    <span aria-hidden>📷</span>
+                    <p>사진이 선택되었습니다</p>
+                    <p className="capture-box__selected-hint">결과 화면의 「이미지보기」에서 확인할 수 있습니다</p>
+                  </div>
                   <button
                     type="button"
                     className="capture-box__clear"
@@ -288,6 +292,7 @@ export function ProductCaptureApp() {
             <MarketShortcuts
               productName={result.productName}
               keyword={result.keyword}
+              capturedImageUrl={preview}
               naverProductCount={
                 result.itemscoutMetricsAvailable
                   ? result.competitionByChannel?.find(c => c.channel === 'naver')?.productCount

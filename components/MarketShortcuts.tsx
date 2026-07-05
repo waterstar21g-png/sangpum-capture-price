@@ -16,6 +16,8 @@ import type { NaverShopListing } from '@/lib/naver-shopping';
 interface Props {
   productName: string;
   keyword: string;
+  /** 카메라·갤러리로 선택한 이미지 (있을 때만 이미지보기 토글 표시) */
+  capturedImageUrl?: string | null;
   /** 네이버 채널 경쟁강도 (키워드 분석 패널) */
   naverProductCount?: number;
   naverMonthlySearches?: number;
@@ -25,6 +27,7 @@ interface Props {
 export function MarketShortcuts({
   productName,
   keyword,
+  capturedImageUrl,
   naverProductCount,
   naverMonthlySearches,
   naverIntensity,
@@ -38,6 +41,7 @@ export function MarketShortcuts({
   const [busy, setBusy] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
   const [copiedReady, setCopiedReady] = useState(false);
+  const [imageVisible, setImageVisible] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewErr, setPreviewErr] = useState<string | null>(null);
   const [preview, setPreview] = useState<{
@@ -63,6 +67,10 @@ export function MarketShortcuts({
       cancelled = true;
     };
   }, [productName, keyword, pasteText]);
+
+  useEffect(() => {
+    setImageVisible(false);
+  }, [capturedImageUrl]);
 
   if (!searchText) return null;
 
@@ -146,9 +154,29 @@ export function MarketShortcuts({
           {copiedReady && <span className="paste-ready__badge">복사됨</span>}
         </div>
         <code className="paste-ready__text">{pasteText}</code>
-        <button type="button" className="paste-ready__btn" onClick={copyOnly}>
-          상품명 다시 복사
-        </button>
+        <div className="paste-ready__actions">
+          <button type="button" className="paste-ready__btn" onClick={copyOnly}>
+            상품명 다시 복사
+          </button>
+          {capturedImageUrl && (
+            <button
+              type="button"
+              className={`paste-ready__toggle${imageVisible ? ' paste-ready__toggle--on' : ''}`}
+              onClick={() => setImageVisible(v => !v)}
+              aria-pressed={imageVisible}
+              aria-label={imageVisible ? '이미지 숨기기' : '이미지보기'}
+              title={imageVisible ? '이미지 숨기기' : '캡처·갤러리 이미지 보기'}
+            >
+              <span className="paste-ready__toggle-icon" aria-hidden>🖼</span>
+              <span className="paste-ready__toggle-label">이미지보기</span>
+            </button>
+          )}
+        </div>
+        {imageVisible && capturedImageUrl && (
+          <div className="paste-ready__image">
+            <img src={capturedImageUrl} alt="캡처·갤러리에서 선택한 상품" className="paste-ready__image-img" />
+          </div>
+        )}
       </div>
       <div className="shortcuts" role="list">
         {MARKET_SHORTCUTS.map(site => {
