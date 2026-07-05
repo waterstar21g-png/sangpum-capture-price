@@ -7,7 +7,6 @@ import {
   pushSearchHistory,
   mergeSearchHistoryWithDb,
   saveSearchHistory,
-  HISTORY_SCROLL_ROWS,
   type SearchHistoryEntry,
 } from '@/lib/input-history';
 import { fetchSessionSearchImages } from '@/lib/search-image-client';
@@ -46,9 +45,9 @@ export function PersistedHintInput(props: Props) {
 }
 
 interface KeywordProps extends Props {
-  searchHistory: SearchHistoryEntry[];
-  onPickEntry: (entry: SearchHistoryEntry) => void;
   onCommitSearch: (text: string) => void;
+  searchHistory?: SearchHistoryEntry[];
+  onPickEntry?: (entry: SearchHistoryEntry) => void;
 }
 
 /** 키워드 직접 입력 + 통합 최근 검색 이력 */
@@ -59,7 +58,7 @@ export function PersistedKeywordInput({
   onChange,
   placeholder,
   disabled,
-  searchHistory,
+  searchHistory = [],
   onPickEntry,
   onCommitSearch,
 }: KeywordProps) {
@@ -86,7 +85,7 @@ export function PersistedKeywordInput({
         onChange={e => onChange(e.target.value)}
         onInput={e => {
           const hit = findHistoryMatch(e.currentTarget.value);
-          if (hit) onPickEntry(hit);
+          if (hit && onPickEntry) onPickEntry(hit);
         }}
         onKeyDown={e => {
           if (e.key === 'Enter') {
@@ -108,69 +107,8 @@ export function PersistedKeywordInput({
           ))}
         </datalist>
       )}
-      {searchHistory.length > 0 && (
-        <SearchHistoryList items={searchHistory} onPick={onPickEntry} />
-      )}
     </div>
   );
-}
-
-function SearchHistoryList({
-  items,
-  onPick,
-}: {
-  items: SearchHistoryEntry[];
-  onPick: (entry: SearchHistoryEntry) => void;
-}) {
-  const [open, setOpen] = useState(true);
-
-  return (
-    <div className="input-history">
-      <button
-        type="button"
-        className="input-history__toggle"
-        onClick={() => setOpen(v => !v)}
-        aria-expanded={open}
-      >
-        최근 검색 {items.length}건
-        <span className="input-history__scroll-hint"> · 5건씩 스크롤</span>
-        <span aria-hidden>{open ? ' ▲' : ' ▼'}</span>
-      </button>
-      {open && (
-        <ul
-          className="input-history__list input-history__list--rich input-history__list--scroll"
-          role="list"
-          style={{ ['--history-scroll-rows' as string]: HISTORY_SCROLL_ROWS }}
-        >
-          {items.map(entry => (
-            <li key={`${entry.searchedAt}-${entryDedupeKey(entry)}`}>
-              <button
-                type="button"
-                className="input-history__chip-rich"
-                onClick={() => {
-                  onPick(entry);
-                }}
-              >
-                <span className="input-history__chip-body">
-                  <span className="input-history__name">{entry.productName}</span>
-                  {entry.keyword !== entry.productName && (
-                    <span className="input-history__kw">키워드: {entry.keyword}</span>
-                  )}
-                  {entry.hint && entry.hint !== entry.productName && (
-                    <span className="input-history__hint">힌트: {entry.hint}</span>
-                  )}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function entryDedupeKey(entry: SearchHistoryEntry): string {
-  return (entry.productName || entry.keyword).trim().toLowerCase();
 }
 
 export function usePersistedInputs() {

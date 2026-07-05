@@ -14,6 +14,7 @@ import { isAndroidDevice } from '@/lib/kiwi-browser';
 import { saveCaptureToGallery } from '@/lib/save-capture-gallery';
 import { entryImageSrc, persistSearchImageToDb } from '@/lib/search-image-client';
 import { PersistedHintInput, PersistedKeywordInput, usePersistedInputs } from './PersistedInput';
+import { SearchHistoryPanel } from './SearchHistoryPanel';
 
 type ActiveField = 'image' | 'hint' | 'keyword';
 
@@ -356,6 +357,10 @@ export function ProductCaptureApp() {
             onPickEntry={onPickHistoryEntry}
             onCommitSearch={commitKeywordSearch}
           />
+
+          {searchHistory.length > 0 && (
+            <SearchHistoryPanel items={searchHistory} onPick={onPickHistoryEntry} />
+          )}
 
           {error && <p className="alert" role="alert">{error}</p>}
           {galleryHint && <p className="notice" role="status">{galleryHint}</p>}
