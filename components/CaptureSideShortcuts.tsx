@@ -22,7 +22,7 @@ interface Props {
   onHint?: (message: string | null) => void;
 }
 
-/** 캡처 화면 — 이미지 우측 세로 바로가기 (7개) */
+/** 캡처 화면 — 이미지 우측 바로가기 2×4 (7개) */
 export function CaptureSideShortcuts({ keyword, disabled, onPreview, onHint }: Props) {
   const q: ShortcutQuery = { productName: keyword.trim(), keyword: keyword.trim() };
   const searchText = shortcutSearchText(q);
