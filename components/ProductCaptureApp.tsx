@@ -1,9 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ProductScoutResult } from '@/lib/itemscout/types';
 import type { SearchHistoryEntry } from '@/lib/input-history';
-import { compressImageToDataUrl } from '@/lib/compress-image';
+import { compressImageToDataUrl, compressImageToThumbnail } from '@/lib/compress-image';
 import { ViewTrendChart } from './ViewTrendChart';
 import { MarketShortcuts } from './MarketShortcuts';
 import { OverviewChart } from './OverviewChart';
@@ -26,6 +26,8 @@ export function ProductCaptureApp() {
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [searchImageUrl, setSearchImageUrl] = useState<string | null>(null);
+  const [imageThumb, setImageThumb] = useState<string | null>(null);
   const {
     hint,
     setHint,
@@ -40,24 +42,26 @@ export function ProductCaptureApp() {
   const [kiwiHint, setKiwiHint] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const textTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipKeywordEffectsRef = useRef(false);
 
-  const revokePreview = useCallback((url: string | null) => {
-    if (url?.startsWith('blob:')) URL.revokeObjectURL(url);
-  }, []);
-
-  useEffect(() => () => revokePreview(preview), [preview, revokePreview]);
   useEffect(() => () => { if (textTimerRef.current) clearTimeout(textTimerRef.current); }, []);
 
   /** 액션 항목만 남기고 나머지 입력·사진 전부 제거 */
   function clearExcept(active: ActiveField) {
     if (active !== 'image') {
-      revokePreview(preview);
       setPreview(null);
+      setSearchImageUrl(null);
+      setImageThumb(null);
       if (cameraRef.current) cameraRef.current.value = '';
       if (galleryRef.current) galleryRef.current.value = '';
     }
     if (active !== 'hint') setHint('');
-    if (active !== 'keyword') setManualKeyword('');
+    if (active !== 'keyword') applyKeywordValue('');
+  }
+
+  function applyKeywordValue(value: string) {
+    skipKeywordEffectsRef.current = true;
+    setManualKeyword(value);
   }
 
   async function onPickFile(file: File | undefined) {
@@ -66,12 +70,21 @@ export function ProductCaptureApp() {
       return;
     }
     clearExcept('image');
-    revokePreview(preview);
-    setPreview(URL.createObjectURL(file));
     setError(null);
     setResult(null);
     setVisionInfo(null);
-    await searchByImage(file);
+    try {
+      const [dataUrl, thumb] = await Promise.all([
+        compressImageToDataUrl(file),
+        compressImageToThumbnail(file),
+      ]);
+      setPreview(dataUrl);
+      setSearchImageUrl(dataUrl);
+      setImageThumb(thumb);
+      await searchByImage(dataUrl, thumb);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '이미지 처리에 실패했습니다.');
+    }
   }
 
   function onHintChange(value: string) {
@@ -81,6 +94,11 @@ export function ProductCaptureApp() {
   }
 
   function onKeywordChange(value: string) {
+    if (skipKeywordEffectsRef.current) {
+      skipKeywordEffectsRef.current = false;
+      setManualKeyword(value);
+      return;
+    }
     clearExcept('keyword');
     setManualKeyword(value);
     queueTextSearch(value);
@@ -88,8 +106,20 @@ export function ProductCaptureApp() {
 
   function onPickHistoryEntry(entry: SearchHistoryEntry) {
     const text = (entry.productName || entry.keyword).trim();
+    if (entry.imageThumb) {
+      if (cameraRef.current) cameraRef.current.value = '';
+      if (galleryRef.current) galleryRef.current.value = '';
+      setHint(entry.hint ?? '');
+      applyKeywordValue(text);
+      setPreview(entry.imageThumb);
+      setSearchImageUrl(entry.imageThumb);
+      setImageThumb(entry.imageThumb);
+      if (text) void searchByText(text, entry.imageThumb, entry.imageThumb);
+      return;
+    }
     clearExcept('keyword');
-    setManualKeyword(text);
+    if (entry.hint) setHint(entry.hint);
+    applyKeywordValue(text);
     if (text) void searchByText(text);
   }
 
@@ -100,19 +130,18 @@ export function ProductCaptureApp() {
     textTimerRef.current = setTimeout(() => void searchByText(trimmed), 450);
   }
 
-  async function searchByImage(file: File | Blob) {
+  async function searchByImage(dataUrl: string, thumb: string) {
     setError(null);
     setResult(null);
     setVisionInfo(null);
     setBusy(true);
     try {
-      const dataUrl = await compressImageToDataUrl(file);
       const res = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageDataUrl: dataUrl, searchPriority: 'productName' }),
       });
-      await finishSearch(res);
+      await finishSearch(res, { imageThumb: thumb, displayImageUrl: dataUrl });
     } catch (e) {
       setError(e instanceof Error ? e.message : '분석에 실패했습니다.');
     } finally {
@@ -120,10 +149,19 @@ export function ProductCaptureApp() {
     }
   }
 
-  async function searchByText(text: string) {
+  async function searchByText(text: string, keepImageThumb?: string, displayImageUrl?: string) {
     setError(null);
     setResult(null);
     setVisionInfo(null);
+    if (keepImageThumb && displayImageUrl) {
+      setPreview(displayImageUrl);
+      setSearchImageUrl(displayImageUrl);
+      setImageThumb(keepImageThumb);
+    } else {
+      setSearchImageUrl(null);
+      setImageThumb(null);
+      setPreview(null);
+    }
     setBusy(true);
     try {
       const res = await fetch('/api/analyze', {
@@ -136,7 +174,7 @@ export function ProductCaptureApp() {
           searchPriority: 'productName',
         }),
       });
-      await finishSearch(res);
+      await finishSearch(res, keepImageThumb ? { imageThumb: keepImageThumb, displayImageUrl } : undefined);
     } catch (e) {
       setError(e instanceof Error ? e.message : '분석에 실패했습니다.');
     } finally {
@@ -144,23 +182,38 @@ export function ProductCaptureApp() {
     }
   }
 
-  async function finishSearch(res: Response) {
+  async function finishSearch(
+    res: Response,
+    options?: { imageThumb?: string; displayImageUrl?: string; hint?: string },
+  ) {
     const data = await parseAnalyzeResponse(res);
     if (!res.ok || !data.ok || !data.scout) {
       throw new Error(data.message ?? '분석에 실패했습니다.');
     }
+    const thumb = options?.imageThumb;
+    if (options?.displayImageUrl) {
+      setPreview(options.displayImageUrl);
+      setSearchImageUrl(options.displayImageUrl);
+    } else if (thumb) {
+      setPreview(thumb);
+      setSearchImageUrl(thumb);
+    }
+    if (thumb) setImageThumb(thumb);
     setResult(data.scout);
     setVisionInfo(data.vision ?? null);
-    setManualKeyword(data.scout.productName);
+    applyKeywordValue(data.scout.productName);
     recordSuccessfulAnalysis({
       keyword: data.scout.productName,
       productName: data.scout.productName,
+      hint: options?.hint,
+      imageThumb: thumb,
     });
   }
 
   function reset() {
-    revokePreview(preview);
     setPreview(null);
+    setSearchImageUrl(null);
+    setImageThumb(null);
     setHint('');
     setManualKeyword('');
     setResult(null);
@@ -192,15 +245,16 @@ export function ProductCaptureApp() {
           </p>
 
           <div className="capture-box">
-            {preview ? (
+            {(preview || searchImageUrl) ? (
               <>
-                <img src={preview} alt="선택한 상품" className="capture-box__img" />
+                <img src={preview || searchImageUrl || ''} alt="선택한 상품" className="capture-box__img" />
                 <button
                   type="button"
                   className="capture-box__clear"
                   onClick={() => {
-                    revokePreview(preview);
                     setPreview(null);
+                    setSearchImageUrl(null);
+                    setImageThumb(null);
                     if (cameraRef.current) cameraRef.current.value = '';
                     if (galleryRef.current) galleryRef.current.value = '';
                   }}
@@ -265,6 +319,11 @@ export function ProductCaptureApp() {
 
         {result && !busy && (
           <section className="result">
+            {searchImageUrl && (
+              <div className="result__photo">
+                <img src={searchImageUrl} alt={result.productName} className="result__photo-img" />
+              </div>
+            )}
             <div className="result__meta">
               <span className={`badge badge--${result.source}`}>
                 {result.source === 'naver' ? '네이버 쇼핑' : result.source === 'itemscout' ? '아이템스카우트' : '데모 데이터'}

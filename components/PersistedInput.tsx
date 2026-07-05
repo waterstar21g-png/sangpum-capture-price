@@ -120,13 +120,23 @@ function SearchHistoryList({
           {items.map(entry => (
             <li key={`${entry.searchedAt}-${entryDedupeKey(entry)}`}>
               <button type="button" className="input-history__chip-rich" onClick={() => onPick(entry)}>
-                <span className="input-history__name">{entry.productName}</span>
-                {entry.keyword !== entry.productName && (
-                  <span className="input-history__kw">키워드: {entry.keyword}</span>
+                {entry.imageThumb && (
+                  <img
+                    src={entry.imageThumb}
+                    alt=""
+                    className="input-history__thumb"
+                    aria-hidden
+                  />
                 )}
-                {entry.hint && entry.hint !== entry.productName && (
-                  <span className="input-history__hint">힌트: {entry.hint}</span>
-                )}
+                <span className="input-history__chip-body">
+                  <span className="input-history__name">{entry.productName}</span>
+                  {entry.keyword !== entry.productName && (
+                    <span className="input-history__kw">키워드: {entry.keyword}</span>
+                  )}
+                  {entry.hint && entry.hint !== entry.productName && (
+                    <span className="input-history__hint">힌트: {entry.hint}</span>
+                  )}
+                </span>
               </button>
             </li>
           ))}
@@ -168,6 +178,7 @@ export function usePersistedInputs() {
     keyword: string;
     productName: string;
     hint?: string;
+    imageThumb?: string;
   }) {
     const next = pushSearchHistory(params);
     setSearchHistory(next);

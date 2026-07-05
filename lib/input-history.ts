@@ -1,11 +1,13 @@
 const STORAGE_KEY = 'sangpum-capture:input-store';
 const MAX_HISTORY = 50;
 
-/** 최근 검색 1건 — 키워드 + 상품명(full name) + 힌트 */
+/** 최근 검색 1건 — 키워드 + 상품명(full name) + 힌트 + 썸네일 */
 export interface SearchHistoryEntry {
   keyword: string;
   productName: string;
   hint?: string;
+  /** 이미지 검색 시 썸네일 data URL */
+  imageThumb?: string;
   searchedAt: string;
 }
 
@@ -42,12 +44,15 @@ function sanitizeEntry(raw: unknown): SearchHistoryEntry | null {
   const productName = typeof o.productName === 'string' ? o.productName.trim() : '';
   if (!keyword && !productName) return null;
   const hint = typeof o.hint === 'string' && o.hint.trim() ? o.hint.trim() : undefined;
+  const imageThumb =
+    typeof o.imageThumb === 'string' && o.imageThumb.startsWith('data:image/') ? o.imageThumb : undefined;
   const searchedAt =
     typeof o.searchedAt === 'string' && o.searchedAt ? o.searchedAt : new Date().toISOString();
   return {
     keyword: keyword || productName,
     productName: productName || keyword,
     hint,
+    imageThumb,
     searchedAt,
   };
 }
@@ -138,6 +143,7 @@ export function pushSearchHistory(entry: {
   keyword: string;
   productName: string;
   hint?: string;
+  imageThumb?: string;
 }): SearchHistoryEntry[] {
   const keyword = entry.keyword.trim();
   const productName = entry.productName.trim();
@@ -147,6 +153,7 @@ export function pushSearchHistory(entry: {
     keyword: keyword || productName,
     productName: productName || keyword,
     hint: entry.hint?.trim() || undefined,
+    imageThumb: entry.imageThumb,
     searchedAt: new Date().toISOString(),
   });
   if (!newEntry) return readStore().searchHistory;
