@@ -21,6 +21,7 @@ export async function POST(req: NextRequest) {
     productName?: string;
     hint?: string;
     skipVision?: boolean;
+    searchPriority?: 'productName' | 'keyword';
   };
   try {
     body = await req.json();
@@ -37,6 +38,8 @@ export async function POST(req: NextRequest) {
   let productName = directProductName ?? '';
   let category: string | undefined;
   let visionConfidence: number | undefined;
+
+  const searchPriority = body.searchPriority === 'keyword' ? 'keyword' : 'productName';
 
   if (!keyword || !productName) {
     if (!imageDataUrl) {
@@ -95,15 +98,32 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  /** 검색·가격비교·마켓 바로가기 — 상품명 우선 (기본) */
+  const primarySearch =
+    searchPriority === 'productName'
+      ? (productName.trim() || keyword.trim())
+      : (keyword.trim() || productName.trim());
+  if (primarySearch && primarySearch !== keyword) {
+    keyword = primarySearch;
+  }
+  if (primarySearch && !productName.trim()) {
+    productName = primarySearch;
+  }
+
   try {
-    const scout = await fetchKeywordAnalysis({ keyword, productName, category });
+    const scout = await fetchKeywordAnalysis({ keyword: primarySearch, productName, category });
+    const scoutWithName = {
+      ...scout,
+      productName: productName.trim() || scout.productName,
+      keyword: primarySearch,
+    };
     return NextResponse.json({
       ok: true,
       vision:
         visionConfidence != null
-          ? { confidence: visionConfidence, keyword, productName, category }
+          ? { confidence: visionConfidence, keyword: primarySearch, productName, category }
           : undefined,
-      scout,
+      scout: scoutWithName,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'scout_failed';

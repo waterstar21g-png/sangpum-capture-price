@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Noto_Sans_KR } from 'next/font/google';
+import { MobileEnv } from '@/components/MobileEnv';
 import './globals.css';
 
 const noto = Noto_Sans_KR({
@@ -10,20 +11,51 @@ const noto = Noto_Sans_KR({
 });
 
 export const metadata: Metadata = {
-  title: '상품캡처 및 가격조회',
-  description: '사진으로 상품을 인식하고 아이템스카우트 기반 시중 최저가·경쟁 강도·조회 추세를 조회합니다.',
+  title: {
+    default: '상품캡처 및 가격조회',
+    template: '%s · 상품캡처',
+  },
+  description:
+    '모바일에서 사진으로 상품을 인식하고 네이버·아이템스카우트 기반 시중 최저가·경쟁 강도·조회 추세를 조회합니다.',
+  applicationName: '상품캡처',
+  keywords: ['상품캡처', '가격조회', '아이템스카우트', '네이버쇼핑', '쿠팡'],
+  authors: [{ name: '함께온라인' }],
+  creator: '함께온라인',
+  formatDetection: {
+    telephone: false,
+    email: false,
+    address: false,
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: '상품캡처',
+  },
+  other: {
+    'mobile-web-app-capable': 'yes',
+  },
 };
 
+/** 모바일 브라우저·PWA 전용 뷰포트 (노치·홈 인디케이터 대응) */
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  themeColor: '#0f172a',
+  maximumScale: 5,
+  userScalable: true,
+  viewportFit: 'cover',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#0f172a' },
+    { media: '(prefers-color-scheme: dark)', color: '#0f172a' },
+  ],
+  colorScheme: 'light',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ko" className={noto.variable}>
-      <body>{children}</body>
+      <body>
+        <MobileEnv>{children}</MobileEnv>
+      </body>
     </html>
   );
 }

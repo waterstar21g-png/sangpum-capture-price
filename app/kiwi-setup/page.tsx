@@ -20,7 +20,7 @@ function KiwiSetupContent() {
   const [hint, setHint] = useState('');
 
   return (
-    <div className="app-shell">
+    <div className="app">
       <header className="app-header">
         <div className="app-header__inner">
           <span className="app-header__logo" aria-hidden>
@@ -118,7 +118,7 @@ function KiwiSetupContent() {
 
 export default function KiwiSetupPage() {
   return (
-    <Suspense fallback={<div className="app-shell app-main">로딩…</div>}>
+    <Suspense fallback={<div className="app"><main className="app-main">로딩…</main></div>}>
       <KiwiSetupContent />
     </Suspense>
   );

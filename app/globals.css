@@ -14,7 +14,13 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
-html { -webkit-text-size-adjust: 100%; }
+/* ── 모바일 우선 기본 ── */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
 
 body {
   margin: 0;
@@ -24,6 +30,11 @@ body {
   color: var(--text);
   background: var(--bg);
   min-height: 100dvh;
+  min-height: 100svh;
+  padding-left: env(safe-area-inset-left, 0);
+  padding-right: env(safe-area-inset-right, 0);
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 a { color: var(--blue); text-decoration: none; }
@@ -38,7 +49,8 @@ img { max-width: 100%; height: auto; display: block; }
 .app { min-height: 100dvh; display: flex; flex-direction: column; }
 .app-header {
   background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 60%, #ea580c 120%);
-  color: #fff; padding: 1.25rem 1rem;
+  color: #fff;
+  padding: max(1.25rem, env(safe-area-inset-top, 0px)) 1rem 1.25rem;
 }
 .app-header__inner { max-width: 520px; margin: 0 auto; display: flex; align-items: center; gap: 0.85rem; }
 .app-header__logo { font-size: 2rem; line-height: 1; }
@@ -47,7 +59,9 @@ img { max-width: 100%; height: auto; display: block; }
 
 .app-main { flex: 1; width: 100%; max-width: 520px; margin: 0 auto; padding: 1rem; }
 .app-footer {
-  text-align: center; padding: 1rem; font-size: 0.75rem; color: var(--muted);
+  text-align: center;
+  padding: 1rem 1rem max(1rem, env(safe-area-inset-bottom, 0px));
+  font-size: 0.75rem; color: var(--muted);
   border-top: 1px solid var(--border); background: var(--surface);
 }
 .app-footer p { margin: 0; }
@@ -63,10 +77,20 @@ img { max-width: 100%; height: auto; display: block; }
 
 /* 캡처 */
 .capture-box {
+  position: relative;
   border-radius: 12px; overflow: hidden; background: #f8fafc;
   border: 2px dashed #cbd5e1; min-height: 220px;
   display: flex; align-items: center; justify-content: center; margin-bottom: 1rem;
 }
+.capture-box__clear {
+  position: absolute; top: 0.5rem; right: 0.5rem;
+  width: 2rem; height: 2rem; border-radius: 999px;
+  border: none; background: rgba(15, 23, 42, 0.72); color: #fff;
+  font-size: 0.875rem; font-weight: 800; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  touch-action: manipulation;
+}
+.capture-box__clear:disabled { opacity: 0.5; cursor: not-allowed; }
 .capture-box__img { width: 100%; max-height: 300px; object-fit: contain; }
 .capture-box__empty { text-align: center; color: var(--muted); padding: 2rem; }
 .capture-box__empty span { font-size: 2.75rem; display: block; margin-bottom: 0.5rem; }
@@ -75,10 +99,11 @@ img { max-width: 100%; height: auto; display: block; }
 /* 버튼 */
 .btn-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.85rem; }
 .btn {
-  flex: 1; min-width: 7rem; padding: 0.7rem 1rem; border-radius: 10px;
+  flex: 1; min-width: 7rem; min-height: 2.75rem; padding: 0.7rem 1rem; border-radius: 10px;
   border: 1px solid var(--border); background: #fff;
   font-size: 0.875rem; font-weight: 700; font-family: inherit;
   color: var(--text); cursor: pointer; text-align: center; text-decoration: none;
+  touch-action: manipulation; user-select: none;
 }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn--primary { background: var(--primary); border-color: var(--primary); color: #fff; }
@@ -91,7 +116,10 @@ img { max-width: 100%; height: auto; display: block; }
 .field__label { font-size: 0.75rem; font-weight: 700; color: var(--muted); }
 .field input {
   padding: 0.7rem 0.8rem; border-radius: 10px; border: 1px solid var(--border);
-  font-size: 0.9375rem; font-family: inherit;
+  /* iOS: 16px 미만이면 포커스 시 자동 확대 → 모바일 입력 고정 */
+  font-size: 1rem; font-family: inherit;
+  min-height: 2.75rem; width: 100%;
+  -webkit-appearance: none; appearance: none;
 }
 .field--persisted { margin-bottom: 0.85rem; }
 .input-history { margin-top: 0.35rem; }
@@ -136,6 +164,15 @@ img { max-width: 100%; height: auto; display: block; }
 
 .alert { margin: 0.5rem 0 0; font-size: 0.8125rem; color: #dc2626; }
 .muted { margin: 0; font-size: 0.8125rem; color: var(--muted); }
+.mobile-tip {
+  margin: 0.65rem 0 0; text-align: center; font-size: 0.75rem; line-height: 1.45;
+}
+.search-source-hint {
+  margin: 0 0 0.65rem; font-size: 0.75rem; color: var(--muted); text-align: center;
+}
+.search-source-hint strong { color: var(--accent); }
+/* PWA 홈 화면 추가 후에는 안내 문구 숨김 */
+html.is-standalone .mobile-tip { display: none; }
 
 /* 로딩 */
 .spinner {
@@ -195,10 +232,11 @@ img { max-width: 100%; height: auto; display: block; }
 }
 .shortcut {
   display: flex; flex-direction: column; align-items: center; gap: 0.35rem;
-  padding: 0.55rem 0.25rem; border-radius: 12px;
+  min-height: 2.75rem; padding: 0.55rem 0.25rem; border-radius: 12px;
   border: 1px solid var(--border); background: #f8fafc;
   color: var(--text); text-decoration: none;
   transition: border-color 0.15s, box-shadow 0.15s;
+  touch-action: manipulation; user-select: none;
 }
 button.shortcut--btn {
   font: inherit; cursor: pointer; width: 100%;
@@ -432,8 +470,24 @@ a.nv-row:hover .nv-row__name { text-decoration: underline; }
   font-size: 0.8125rem; font-weight: 700; padding: 0;
 }
 
+/* PWA 홈 화면 추가 시 하단 여백 */
+html.is-standalone .app-footer {
+  padding-bottom: max(1.25rem, env(safe-area-inset-bottom, 0px));
+}
+
+/* 터치 기기: hover 의존 UI 최소화 */
+html.is-touch .shortcut:active {
+  border-color: #64748b;
+  background: #fff;
+  transform: scale(0.98);
+}
+html.is-touch .btn:active:not(:disabled) {
+  opacity: 0.92;
+  transform: scale(0.99);
+}
+
 @media (min-width: 640px) {
-  .app-header { padding: 1.5rem 1.25rem; }
+  .app-header { padding: max(1.5rem, env(safe-area-inset-top, 0px)) 1.25rem 1.5rem; }
   .app-main { padding: 1.25rem; }
 }
 

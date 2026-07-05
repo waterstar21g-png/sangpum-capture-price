@@ -28,11 +28,15 @@ export function PersistedHintInput(props: Props) {
       <input
         id={props.id}
         type="text"
+        inputMode="text"
+        enterKeyHint="next"
         value={props.value}
         onChange={e => props.onChange(e.target.value)}
         placeholder={props.placeholder}
         disabled={props.disabled}
         autoComplete="off"
+        autoCorrect="off"
+        spellCheck={false}
       />
     </div>
   );
@@ -55,7 +59,7 @@ export function PersistedKeywordInput({
   onPickEntry,
 }: KeywordProps) {
   const listId = `${id}-history-list`;
-  const datalistValues = searchHistory.map(e => e.keyword);
+  const datalistValues = searchHistory.map(e => e.productName || e.keyword);
 
   return (
     <div className="field field--persisted">
@@ -64,13 +68,17 @@ export function PersistedKeywordInput({
       </label>
       <input
         id={id}
-        type="text"
+        type="search"
+        inputMode="search"
+        enterKeyHint="search"
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
         disabled={disabled}
         list={datalistValues.length ? listId : undefined}
         autoComplete="off"
+        autoCorrect="off"
+        spellCheck={false}
       />
       {datalistValues.length > 0 && (
         <datalist id={listId}>
@@ -152,7 +160,7 @@ export function usePersistedInputs() {
   }, [hint, manualKeyword, hydrated]);
 
   function pickSearchEntry(entry: SearchHistoryEntry) {
-    setManualKeyword(entry.keyword);
+    setManualKeyword(entry.productName || entry.keyword);
     if (entry.hint) setHint(entry.hint);
   }
 
