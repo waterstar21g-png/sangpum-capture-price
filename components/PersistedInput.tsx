@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   loadInputStore,
   saveInputDraft,
@@ -54,8 +54,8 @@ interface KeywordProps extends Props {
   onCommitSearch: (text: string) => void;
   searchHistory?: SearchHistoryEntry[];
   onPickEntry?: (entry: SearchHistoryEntry) => void;
-  /** 모바일 절약 — datalist 선택 시 자동검색 끔 */
-  skipInputAutoSearch?: boolean;
+  /** 라벨 우측 보조 버튼 등 */
+  labelExtra?: ReactNode;
 }
 
 /** 키워드 직접 입력 + 통합 최근 검색 이력 */
@@ -69,7 +69,7 @@ export function PersistedKeywordInput({
   searchHistory = [],
   onPickEntry,
   onCommitSearch,
-  skipInputAutoSearch = false,
+  labelExtra,
 }: KeywordProps) {
   const listId = `${id}-history-list`;
   const datalistValues = searchHistory.map(e => e.productName || e.keyword);
@@ -82,9 +82,12 @@ export function PersistedKeywordInput({
 
   return (
     <div className="field field--persisted">
-      <label className="field__label" htmlFor={id}>
-        {label}
-      </label>
+      <div className="field__head">
+        <label className="field__label" htmlFor={id}>
+          {label}
+        </label>
+        {labelExtra}
+      </div>
       <input
         id={id}
         type="search"
@@ -93,7 +96,6 @@ export function PersistedKeywordInput({
         value={value}
         onChange={e => onChange(e.target.value)}
         onInput={e => {
-          if (skipInputAutoSearch) return;
           const hit = findHistoryMatch(e.currentTarget.value);
           if (hit && onPickEntry) onPickEntry(hit);
         }}

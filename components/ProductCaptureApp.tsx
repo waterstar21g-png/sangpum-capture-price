@@ -5,16 +5,14 @@ import type { ProductScoutResult } from '@/lib/itemscout/types';
 import type { SearchHistoryEntry } from '@/lib/input-history';
 import { compressImageToDataUrl, compressImageToThumbnail } from '@/lib/compress-image';
 import { ViewTrendChart } from './ViewTrendChart';
-import { MarketShortcuts } from './MarketShortcuts';
 import { OverviewChart } from './OverviewChart';
 import { RatioBars } from './RatioBars';
 import { PriceComparePanel } from './PriceComparePanel';
-import { openItemscoutInKiwi } from '@/lib/itemscout/open-keyword';
+import { copyProductNameForPaste, openItemscoutInKiwi } from '@/lib/itemscout/open-keyword';
 import { isAndroidDevice } from '@/lib/kiwi-browser';
 import { saveCaptureToGallery } from '@/lib/save-capture-gallery';
 import { entryImageSrc, persistSearchImageToDb } from '@/lib/search-image-client';
 import { PersistedKeywordInput, usePersistedInputs } from './PersistedInput';
-import { loadMobileSaveMode, saveMobileSaveMode } from '@/lib/mobile-save-mode';
 import { SearchHistoryPanel } from './SearchHistoryPanel';
 import { CaptureSideShortcuts, type CaptureNaverPreview } from './CaptureSideShortcuts';
 import { NaverShoppingPreview } from './NaverShoppingPreview';
@@ -51,13 +49,9 @@ export function ProductCaptureApp() {
   const [busy, setBusy] = useState(false);
   const [shortcutHint, setShortcutHint] = useState<string | null>(null);
   const [capturePreview, setCapturePreview] = useState<CaptureNaverPreview | null>(null);
+  const [copyHint, setCopyHint] = useState<string | null>(null);
   const textTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skipKeywordEffectsRef = useRef(false);
-  const [mobileSave, setMobileSave] = useState(false);
-
-  useEffect(() => {
-    setMobileSave(loadMobileSaveMode());
-  }, []);
 
   useEffect(() => () => { if (textTimerRef.current) clearTimeout(textTimerRef.current); }, []);
 
@@ -156,18 +150,21 @@ export function ProductCaptureApp() {
   }
 
   function queueTextSearch(text: string) {
-    if (mobileSave) return;
     if (textTimerRef.current) clearTimeout(textTimerRef.current);
     const trimmed = text.trim();
     if (!trimmed) return;
     textTimerRef.current = setTimeout(() => void searchByText(trimmed), 450);
   }
 
-  function toggleMobileSave() {
-    const next = !mobileSave;
-    setMobileSave(next);
-    saveMobileSaveMode(next);
-    if (textTimerRef.current) clearTimeout(textTimerRef.current);
+  async function copyProductNameAgain() {
+    const pasteText = (originalProductName ?? result?.productName ?? manualKeyword).trim();
+    if (!pasteText) return;
+    const { text, copied } = await copyProductNameForPaste(pasteText, result?.keyword ?? manualKeyword);
+    setCopyHint(
+      copied
+        ? `「${text}」복사됨`
+        : `복사 실패 — 직접 선택해 복사: ${text}`,
+    );
   }
 
   async function searchByImage(dataUrl: string, thumb: string) {
@@ -181,13 +178,6 @@ export function ProductCaptureApp() {
         imageDataUrl: dataUrl,
         searchPriority: 'productName',
       };
-      if (mobileSave) {
-        body.economyVision = true;
-        if (hint.trim()) {
-          body.hint = hint.trim();
-          body.skipVision = true;
-        }
-      }
       const res = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -308,6 +298,7 @@ export function ProductCaptureApp() {
       imageId,
       imageUrl,
     });
+    void copyProductNameForPaste(original, data.scout.keyword);
   }
 
   function reset() {
@@ -322,6 +313,7 @@ export function ProductCaptureApp() {
     setError(null);
     setKiwiHint(null);
     setGalleryHint(null);
+    setCopyHint(null);
     if (cameraRef.current) cameraRef.current.value = '';
     if (galleryRef.current) galleryRef.current.value = '';
   }
@@ -341,19 +333,6 @@ export function ProductCaptureApp() {
       <main className="app-main">
         <section className="panel">
           <h2 className="panel__title">상품캡처</h2>
-
-          <label className="mobile-save">
-            <input
-              type="checkbox"
-              checked={mobileSave}
-              onChange={toggleMobileSave}
-              disabled={busy}
-            />
-            <span className="mobile-save__label">
-              <strong>모바일 절약</strong> — 입력 중 자동검색 끔 · AI 토큰 최소화
-              {mobileSave && <em className="mobile-save__hint"> (Enter·이력·촬영 시에만 검색)</em>}
-            </span>
-          </label>
 
           <div className="btn-row capture-actions">
             <button type="button" className="btn btn--primary" onClick={() => cameraRef.current?.click()} disabled={busy}>
@@ -377,8 +356,21 @@ export function ProductCaptureApp() {
             searchHistory={searchHistory}
             onPickEntry={onPickHistoryEntry}
             onCommitSearch={commitKeywordSearch}
-            skipInputAutoSearch={mobileSave}
+            labelExtra={
+              (originalProductName || result?.productName || manualKeyword.trim()) ? (
+                <button
+                  type="button"
+                  className="keyword-copy-btn"
+                  onClick={() => void copyProductNameAgain()}
+                  disabled={busy}
+                  title="상품명 클립보드 복사"
+                >
+                  상품명 다시복사
+                </button>
+              ) : null
+            }
           />
+          {copyHint && <p className="keyword-copy-hint" role="status">{copyHint}</p>}
 
           <div className="capture-row">
             <div className="capture-box">
@@ -416,12 +408,6 @@ export function ProductCaptureApp() {
             />
           </div>
 
-          <SearchHistoryPanel
-            items={searchHistory}
-            onPick={onPickHistoryEntry}
-            disabled={busy}
-          />
-
           {shortcutHint && <p className="capture-shortcuts__hint">{shortcutHint}</p>}
           {capturePreview && (
             <NaverShoppingPreview
@@ -432,6 +418,12 @@ export function ProductCaptureApp() {
               onClose={() => setCapturePreview(null)}
             />
           )}
+
+          <SearchHistoryPanel
+            items={searchHistory}
+            onPick={onPickHistoryEntry}
+            disabled={busy}
+          />
 
           {error && <p className="alert" role="alert">{error}</p>}
           {galleryHint && <p className="notice" role="status">{galleryHint}</p>}
@@ -461,28 +453,6 @@ export function ProductCaptureApp() {
               검색: <strong>{result.productName}</strong>
               {result.category && <span className="result__cat"> · {result.category}</span>}
             </p>
-
-            <MarketShortcuts
-              productName={result.productName}
-              keyword={result.keyword}
-              copyProductName={originalProductName ?? result.productName}
-              skipAutoCopy={mobileSave}
-              naverProductCount={
-                result.itemscoutMetricsAvailable
-                  ? result.competitionByChannel?.find(c => c.channel === 'naver')?.productCount
-                  : undefined
-              }
-              naverMonthlySearches={
-                result.itemscoutMetricsAvailable
-                  ? result.competitionByChannel?.find(c => c.channel === 'naver')?.monthlySearches
-                  : undefined
-              }
-              naverIntensity={
-                result.itemscoutMetricsAvailable
-                  ? result.competitionByChannel?.find(c => c.channel === 'naver')?.intensity
-                  : undefined
-              }
-            />
 
             {result.itemscoutMetricsAvailable ? (
               <>

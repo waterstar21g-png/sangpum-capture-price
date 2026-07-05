@@ -76,13 +76,14 @@ export function CaptureSideShortcuts({ keyword, disabled, onPreview, onHint }: P
   }
 
   return (
-    <div className="capture-shortcuts" role="list" aria-label="마켓 바로가기">
+    <div className="capture-shortcuts capture-shortcuts--icon-only" role="list" aria-label="마켓 바로가기">
       {sites.map(site => (
         <button
           key={site.id}
           type="button"
           role="listitem"
           className="shortcut shortcut--btn capture-shortcuts__btn"
+          aria-label={`${site.label}: ${searchText || '검색어 없음'}`}
           title={`${site.label}: ${searchText || '검색어 없음'}`}
           disabled={disabled || (site.id === 'naver-shopping' && loading)}
           onClick={() => onSiteClick(site)}
@@ -90,7 +91,6 @@ export function CaptureSideShortcuts({ keyword, disabled, onPreview, onHint }: P
           <span className="shortcut__icon" style={{ background: site.color }} aria-hidden>
             {site.mark}
           </span>
-          <span className="shortcut__label">{site.label}</span>
         </button>
       ))}
     </div>
