@@ -13,7 +13,6 @@ import { openItemscoutInKiwi } from '@/lib/itemscout/open-keyword';
 import { isAndroidDevice } from '@/lib/kiwi-browser';
 import { PersistedHintInput, PersistedKeywordInput, usePersistedInputs } from './PersistedInput';
 
-type Step = 'capture' | 'analyzing' | 'result';
 type ActiveField = 'image' | 'hint' | 'keyword';
 
 interface AnalyzeResponse {
@@ -26,7 +25,6 @@ interface AnalyzeResponse {
 export function ProductCaptureApp() {
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
-  const [step, setStep] = useState<Step>('capture');
   const [preview, setPreview] = useState<string | null>(null);
   const {
     hint,
@@ -104,8 +102,9 @@ export function ProductCaptureApp() {
 
   async function searchByImage(file: File | Blob) {
     setError(null);
+    setResult(null);
+    setVisionInfo(null);
     setBusy(true);
-    setStep('analyzing');
     try {
       const dataUrl = await compressImageToDataUrl(file);
       const res = await fetch('/api/analyze', {
@@ -116,7 +115,6 @@ export function ProductCaptureApp() {
       await finishSearch(res);
     } catch (e) {
       setError(e instanceof Error ? e.message : '분석에 실패했습니다.');
-      setStep('capture');
     } finally {
       setBusy(false);
     }
@@ -124,8 +122,9 @@ export function ProductCaptureApp() {
 
   async function searchByText(text: string) {
     setError(null);
+    setResult(null);
+    setVisionInfo(null);
     setBusy(true);
-    setStep('analyzing');
     try {
       const res = await fetch('/api/analyze', {
         method: 'POST',
@@ -140,7 +139,6 @@ export function ProductCaptureApp() {
       await finishSearch(res);
     } catch (e) {
       setError(e instanceof Error ? e.message : '분석에 실패했습니다.');
-      setStep('capture');
     } finally {
       setBusy(false);
     }
@@ -158,7 +156,6 @@ export function ProductCaptureApp() {
       keyword: data.scout.productName,
       productName: data.scout.productName,
     });
-    setStep('result');
   }
 
   function reset() {
@@ -170,7 +167,6 @@ export function ProductCaptureApp() {
     setVisionInfo(null);
     setError(null);
     setKiwiHint(null);
-    setStep('capture');
     if (cameraRef.current) cameraRef.current.value = '';
     if (galleryRef.current) galleryRef.current.value = '';
   }
@@ -182,93 +178,92 @@ export function ProductCaptureApp() {
           <span className="app-header__logo" aria-hidden>📷</span>
           <div>
             <h1 className="app-header__title">상품캡처 및 가격조회</h1>
-            <p className="app-header__sub">선택·입력 즉시 검색</p>
+            <p className="app-header__sub">입력창은 항상 유지 · 조작 시 바로 새 검색</p>
           </div>
         </div>
       </header>
 
       <main className="app-main">
-        {step === 'capture' && (
-          <section className="panel">
-            <h2 className="panel__title">상품 캡처</h2>
-            <p className="panel__lead">
-              카메라·갤러리·힌트·키워드 중 하나만 사용합니다. 조작 시 <strong>나머지는 자동 삭제</strong> 후 바로 검색합니다.
-            </p>
+        <section className="panel">
+          <h2 className="panel__title">상품 캡처</h2>
+          <p className="panel__lead">
+            카메라·갤러리·힌트·키워드 중 하나만 사용합니다. 조작 시 <strong>나머지는 자동 삭제</strong> 후 <strong>새 검색</strong>합니다.
+            결과가 있어도 이 입력창은 그대로 유지됩니다.
+          </p>
 
-            <div className="capture-box">
-              {preview ? (
-                <>
-                  <img src={preview} alt="선택한 상품" className="capture-box__img" />
-                  <button
-                    type="button"
-                    className="capture-box__clear"
-                    onClick={() => {
-                      revokePreview(preview);
-                      setPreview(null);
-                      if (cameraRef.current) cameraRef.current.value = '';
-                      if (galleryRef.current) galleryRef.current.value = '';
-                    }}
-                    disabled={busy}
-                    aria-label="선택한 사진 제거"
-                  >
-                    ✕
-                  </button>
-                </>
-              ) : (
-                <div className="capture-box__empty">
-                  <span aria-hidden>📦</span>
-                  <p>상품 사진을 촬영하거나<br />갤러리에서 선택하세요</p>
-                </div>
-              )}
-            </div>
+          <div className="capture-box">
+            {preview ? (
+              <>
+                <img src={preview} alt="선택한 상품" className="capture-box__img" />
+                <button
+                  type="button"
+                  className="capture-box__clear"
+                  onClick={() => {
+                    revokePreview(preview);
+                    setPreview(null);
+                    if (cameraRef.current) cameraRef.current.value = '';
+                    if (galleryRef.current) galleryRef.current.value = '';
+                  }}
+                  disabled={busy}
+                  aria-label="선택한 사진 제거"
+                >
+                  ✕
+                </button>
+              </>
+            ) : (
+              <div className="capture-box__empty">
+                <span aria-hidden>📦</span>
+                <p>상품 사진을 촬영하거나<br />갤러리에서 선택하세요</p>
+              </div>
+            )}
+          </div>
 
-            <div className="btn-row">
-              <button type="button" className="btn btn--primary" onClick={() => cameraRef.current?.click()} disabled={busy}>
-                카메라 촬영
-              </button>
-              <button type="button" className="btn" onClick={() => galleryRef.current?.click()} disabled={busy}>
-                갤러리 선택
-              </button>
-            </div>
+          <div className="btn-row">
+            <button type="button" className="btn btn--primary" onClick={() => cameraRef.current?.click()} disabled={busy}>
+              카메라 촬영
+            </button>
+            <button type="button" className="btn" onClick={() => galleryRef.current?.click()} disabled={busy}>
+              갤러리 선택
+            </button>
+          </div>
 
-            <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="sr-only" aria-label="카메라 촬영" onChange={e => onPickFile(e.target.files?.[0])} />
-            <input ref={galleryRef} type="file" accept="image/*" className="sr-only" aria-label="갤러리 선택" onChange={e => onPickFile(e.target.files?.[0])} />
+          <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="sr-only" aria-label="카메라 촬영" onChange={e => onPickFile(e.target.files?.[0])} />
+          <input ref={galleryRef} type="file" accept="image/*" className="sr-only" aria-label="갤러리 선택" onChange={e => onPickFile(e.target.files?.[0])} />
 
-            <PersistedHintInput
-              id="product-hint"
-              label="상품 힌트"
-              value={hint}
-              onChange={onHintChange}
-              placeholder="예: 유기농 현미 2kg"
-              disabled={busy}
-            />
+          <PersistedHintInput
+            id="product-hint"
+            label="상품 힌트"
+            value={hint}
+            onChange={onHintChange}
+            placeholder="예: 유기농 현미 2kg"
+            disabled={busy}
+          />
 
-            <div className="divider"><span>또는</span></div>
+          <div className="divider"><span>또는</span></div>
 
-            <PersistedKeywordInput
-              id="manual-keyword"
-              label="키워드 직접 입력"
-              value={manualKeyword}
-              onChange={onKeywordChange}
-              placeholder="예: 보온병 1리터"
-              disabled={busy}
-              searchHistory={searchHistory}
-              onPickEntry={onPickHistoryEntry}
-            />
+          <PersistedKeywordInput
+            id="manual-keyword"
+            label="키워드 직접 입력"
+            value={manualKeyword}
+            onChange={onKeywordChange}
+            placeholder="예: 보온병 1리터"
+            disabled={busy}
+            searchHistory={searchHistory}
+            onPickEntry={onPickHistoryEntry}
+          />
 
-            {error && <p className="alert" role="alert">{error}</p>}
-          </section>
-        )}
+          {error && <p className="alert" role="alert">{error}</p>}
+        </section>
 
-        {step === 'analyzing' && (
-          <section className="panel panel--center">
+        {busy && (
+          <section className="panel panel--center panel--loading" aria-live="polite">
             <div className="spinner" aria-hidden />
             <p className="loading-title">분석 중…</p>
-            <p className="loading-sub">검색 조회 중</p>
+            <p className="loading-sub">새 검색 조회 중</p>
           </section>
         )}
 
-        {step === 'result' && result && (
+        {result && !busy && (
           <section className="result">
             <div className="result__meta">
               <span className={`badge badge--${result.source}`}>
