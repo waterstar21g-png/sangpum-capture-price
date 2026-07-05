@@ -7,6 +7,10 @@ import { ViewTrendChart } from './ViewTrendChart';
 import { MarketShortcuts } from './MarketShortcuts';
 import { OverviewChart } from './OverviewChart';
 import { RatioBars } from './RatioBars';
+import { PriceComparePanel } from './PriceComparePanel';
+import { openItemscoutInKiwi } from '@/lib/itemscout/open-keyword';
+import { isAndroidDevice } from '@/lib/kiwi-browser';
+import { PersistedHintInput, PersistedKeywordInput, usePersistedInputs } from './PersistedInput';
 
 type Step = 'capture' | 'analyzing' | 'result';
 
@@ -22,11 +26,19 @@ export function ProductCaptureApp() {
   const galleryRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<Step>('capture');
   const [preview, setPreview] = useState<string | null>(null);
-  const [hint, setHint] = useState('');
-  const [manualKeyword, setManualKeyword] = useState('');
+  const {
+    hint,
+    setHint,
+    manualKeyword,
+    setManualKeyword,
+    searchHistory,
+    pickSearchEntry,
+    recordSuccessfulAnalysis,
+  } = usePersistedInputs();
   const [result, setResult] = useState<ProductScoutResult | null>(null);
   const [visionInfo, setVisionInfo] = useState<AnalyzeResponse['vision'] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [kiwiHint, setKiwiHint] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const revokePreview = useCallback((url: string | null) => {
@@ -87,6 +99,11 @@ export function ProductCaptureApp() {
 
       setResult(data.scout);
       setVisionInfo(data.vision ?? null);
+      recordSuccessfulAnalysis({
+        keyword: data.scout.keyword,
+        productName: data.scout.productName,
+        hint: manualKeyword.trim() ? undefined : hint.trim() || undefined,
+      });
       setStep('result');
     } catch (e) {
       setError(e instanceof Error ? e.message : '분석에 실패했습니다.');
@@ -99,11 +116,10 @@ export function ProductCaptureApp() {
   function reset() {
     revokePreview(preview);
     setPreview(null);
-    setHint('');
-    setManualKeyword('');
     setResult(null);
     setVisionInfo(null);
     setError(null);
+    setKiwiHint(null);
     setStep('capture');
     if (cameraRef.current) cameraRef.current.value = '';
     if (galleryRef.current) galleryRef.current.value = '';
@@ -150,17 +166,27 @@ export function ProductCaptureApp() {
             <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="sr-only" onChange={e => onPickFile(e.target.files?.[0])} />
             <input ref={galleryRef} type="file" accept="image/*" className="sr-only" onChange={e => onPickFile(e.target.files?.[0])} />
 
-            <label className="field">
-              <span className="field__label">상품 힌트 (선택)</span>
-              <input type="text" value={hint} onChange={e => setHint(e.target.value)} placeholder="예: 유기농 현미 2kg" disabled={busy} />
-            </label>
+            <PersistedHintInput
+              id="product-hint"
+              label="상품 힌트 (선택)"
+              value={hint}
+              onChange={setHint}
+              placeholder="예: 유기농 현미 2kg"
+              disabled={busy}
+            />
 
             <div className="divider"><span>또는</span></div>
 
-            <label className="field">
-              <span className="field__label">키워드 직접 입력</span>
-              <input type="text" value={manualKeyword} onChange={e => setManualKeyword(e.target.value)} placeholder="예: 보온병 1리터" disabled={busy} />
-            </label>
+            <PersistedKeywordInput
+              id="manual-keyword"
+              label="키워드 직접 입력"
+              value={manualKeyword}
+              onChange={setManualKeyword}
+              placeholder="예: 보온병 1리터"
+              disabled={busy}
+              searchHistory={searchHistory}
+              onPickEntry={pickSearchEntry}
+            />
 
             {error && <p className="alert" role="alert">{error}</p>}
 
@@ -200,135 +226,195 @@ export function ProductCaptureApp() {
               {result.category && <span className="result__cat"> · {result.category}</span>}
             </p>
 
-            <MarketShortcuts keyword={result.keyword} />
+            <MarketShortcuts
+              productName={result.productName}
+              keyword={result.keyword}
+              naverProductCount={
+                result.itemscoutMetricsAvailable
+                  ? result.competitionByChannel?.find(c => c.channel === 'naver')?.productCount
+                  : undefined
+              }
+              naverMonthlySearches={
+                result.itemscoutMetricsAvailable
+                  ? result.competitionByChannel?.find(c => c.channel === 'naver')?.monthlySearches
+                  : undefined
+              }
+              naverIntensity={
+                result.itemscoutMetricsAvailable
+                  ? result.competitionByChannel?.find(c => c.channel === 'naver')?.intensity
+                  : undefined
+              }
+            />
 
-            <article className="card">
-              <h3 className="card__title">상품 경쟁강도 정보</h3>
-              <div className="channel-grid">
-                {(result.competitionByChannel ?? []).map(ch => (
-                  <div key={ch.channel} className="channel-card">
-                    <h4 className="channel-card__name">{ch.label}</h4>
-                    <dl className="channel-stats">
-                      <div>
-                        <dt>상품수</dt>
-                        <dd>{fmt(ch.productCount)}개</dd>
+            {result.itemscoutMetricsAvailable ? (
+              <>
+                <article className="card">
+                  <h3 className="card__title">상품 경쟁강도 정보</h3>
+                  <div className="channel-grid">
+                    {(result.competitionByChannel ?? []).map(ch => (
+                      <div key={ch.channel} className="channel-card">
+                        <h4 className="channel-card__name">{ch.label}</h4>
+                        <dl className="channel-stats">
+                          <div>
+                            <dt>상품수</dt>
+                            <dd>{fmt(ch.productCount)}개</dd>
+                          </div>
+                          <div>
+                            <dt>한 달 검색수</dt>
+                            <dd>{fmt(ch.monthlySearches)}회</dd>
+                          </div>
+                          <div>
+                            <dt>경쟁강도</dt>
+                            <dd>
+                              <span className="channel-stats__intensity">{ch.intensity.toFixed(2)}</span>
+                              <span className="channel-stats__label">{ch.intensityLabel}</span>
+                            </dd>
+                          </div>
+                        </dl>
+                        <div className="competition">
+                          <div className="competition__track">
+                            <div
+                              className="competition__fill"
+                              style={{ width: `${Math.min(100, ch.intensity * 100)}%` }}
+                            />
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <dt>한 달 검색수</dt>
-                        <dd>{fmt(ch.monthlySearches)}회</dd>
-                      </div>
-                      <div>
-                        <dt>경쟁강도</dt>
-                        <dd>
-                          <span className="channel-stats__intensity">{ch.intensity.toFixed(2)}</span>
-                          <span className="channel-stats__label">{ch.intensityLabel}</span>
-                        </dd>
-                      </div>
-                    </dl>
-                    <div className="competition">
-                      <div className="competition__track">
-                        <div
-                          className="competition__fill"
-                          style={{ width: `${Math.min(100, ch.intensity * 100)}%` }}
-                        />
-                      </div>
-                    </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </article>
+                </article>
 
-            <article className="card">
-              <h3 className="card__title">종합 차트</h3>
-              <OverviewChart data={result.overviewChart ?? []} />
-            </article>
+                {(result.overviewChart?.length ?? 0) > 0 && (
+                  <article className="card">
+                    <h3 className="card__title">종합 차트</h3>
+                    <p className="card__hint">최근 12개월 · 검색량(%) · 클릭량(%)</p>
+                    <OverviewChart data={result.overviewChart ?? []} />
+                  </article>
+                )}
 
-            <div className="ratio-grid">
-              <article className="card">
-                <h3 className="card__title">성별 클릭 비율</h3>
-                <RatioBars
-                  data={result.genderClickRatio ?? []}
-                  colors={['#2563eb', '#db2777']}
-                />
-              </article>
-              <article className="card">
-                <h3 className="card__title">연령별 클릭 비율</h3>
-                <RatioBars data={result.ageClickRatio ?? []} />
-              </article>
-            </div>
+                {((result.genderClickRatio?.length ?? 0) > 0 ||
+                  (result.ageClickRatio?.length ?? 0) > 0) && (
+                  <div className="ratio-grid">
+                    {(result.genderClickRatio?.length ?? 0) > 0 && (
+                      <article className="card">
+                        <h3 className="card__title">성별 클릭 비율</h3>
+                        <RatioBars
+                          data={result.genderClickRatio ?? []}
+                          colors={['#2563eb', '#db2777']}
+                        />
+                      </article>
+                    )}
+                    {(result.ageClickRatio?.length ?? 0) > 0 && (
+                      <article className="card">
+                        <h3 className="card__title">연령별 클릭 비율</h3>
+                        <RatioBars data={result.ageClickRatio ?? []} />
+                      </article>
+                    )}
+                  </div>
+                )}
 
-            <div className="metrics">
-              <div className="metric">
-                <span className="metric__label">1주 조회수</span>
-                <span className="metric__value">{fmt(result.weeklyViews)}</span>
-              </div>
-              <div className="metric">
-                <span className="metric__label">1주 판매량</span>
-                <span className="metric__value">{fmt(result.weeklySales)}</span>
-              </div>
-            </div>
-
-            <article className="card">
-              <h3 className="card__title">조회 추세 (최근 1주)</h3>
-              <ViewTrendChart data={result.viewTrend} />
-            </article>
-
-            <article className="card">
-              <h3 className="card__title">가격비교 정보</h3>
-              <p className="card__hint">동일상품 대비 최소 5개 사이트</p>
-              {result.lowestPrices.length ? (
-                <ol className="price-list">
-                  {result.lowestPrices.map(item => (
-                    <li key={`${item.rank}-${item.mallName}`} className="price-item">
-                      <span className="price-item__rank">{item.rank}</span>
-                      <div className="price-item__info">
-                        <span className="price-item__name">{item.productName}</span>
-                        <span className="price-item__mall">{item.mallName}</span>
+                {(result.weeklyViews > 0 || result.weeklySales > 0) && (
+                  <div className="metrics">
+                    {result.weeklyViews > 0 && (
+                      <div className="metric">
+                        <span className="metric__label">1주 조회수</span>
+                        <span className="metric__value">{fmt(result.weeklyViews)}</span>
                       </div>
-                      {item.url ? (
-                        <a
-                          href={item.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="price-item__price price-item__price--link"
-                        >
-                          {fmtPrice(item.price)}
-                        </a>
-                      ) : (
-                        <span className="price-item__price">{fmtPrice(item.price)}</span>
-                      )}
-                    </li>
-                  ))}
-                </ol>
-              ) : (
-                <p className="muted">가격비교 데이터가 없습니다.</p>
-              )}
-            </article>
+                    )}
+                    {result.weeklySales > 0 && (
+                      <div className="metric">
+                        <span className="metric__label">1주 판매량</span>
+                        <span className="metric__value">{fmt(result.weeklySales)}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {(result.viewTrend?.length ?? 0) > 0 && (
+                  <article className="card">
+                    <h3 className="card__title">조회 추세</h3>
+                    <p className="card__hint">최근 12개월 · 아이템스카우트 실데이터</p>
+                    <ViewTrendChart data={result.viewTrend} />
+                  </article>
+                )}
+              </>
+            ) : (
+              <article className="card card--muted">
+                <h3 className="card__title">키워드 분석 · 추세</h3>
+                <p className="metrics-unavailable">
+                  검색 추세·경쟁강도·클릭 비율은 <strong>아이템스카우트 실데이터</strong> 연동 후에만
+                  표시합니다. 임의 생성 수치는 판단 오류를 유발할 수 있어 제공하지 않습니다.
+                </p>
+                <button
+                  type="button"
+                  className="btn btn--link metrics-unavailable__link"
+                  onClick={async () => {
+                    const r = await openItemscoutInKiwi(result.productName, result.keyword);
+                    if (!r.ok) {
+                      setKiwiHint(r.message);
+                      return;
+                    }
+                    setKiwiHint(isAndroidDevice() ? r.message : null);
+                  }}
+                >
+                  아이템스카우트에서 「{result.keyword}」 추세 확인 ↗
+                  {isAndroidDevice() ? ' (Kiwi)' : ''}
+                </button>
+              </article>
+            )}
+
+            <PriceComparePanel
+              data={
+                result.priceCompare ?? {
+                  productName: result.productName,
+                  mallLowest: [],
+                  brandCatalog: [],
+                  compareUrl: `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(result.productName)}`,
+                }
+              }
+            />
 
             {(result.source === 'demo' || result.priceSource === 'demo') && (
               <p className="notice">
-                NAVER_CLIENT_ID/SECRET 미설정 시 최저가·상품수는 데모입니다.
-                <a href="https://developers.naver.com/apps/#/list" target="_blank" rel="noopener noreferrer"> 네이버 개발자센터</a>에서 무료 발급 후 .env.local에 추가하세요.
+                가격비교는 데모 샘플입니다. NAVER_CLIENT_ID/SECRET 설정 시 네이버쇼핑 실가격으로 대체됩니다.
+                <a href="https://developers.naver.com/apps/#/list" target="_blank" rel="noopener noreferrer"> 네이버 개발자센터</a>
               </p>
             )}
 
             <div className="btn-row">
               <button type="button" className="btn btn--primary" onClick={reset}>새 상품 조회</button>
-              <a
-                href={`https://itemscout.io/keyword/${encodeURIComponent(result.keyword)}`}
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                type="button"
                 className="btn btn--link"
+                onClick={async () => {
+                  const r = await openItemscoutInKiwi(result.productName, result.keyword);
+                  if (!r.ok) {
+                    setKiwiHint(r.message);
+                    return;
+                  }
+                  if (isAndroidDevice()) {
+                    setKiwiHint(r.message);
+                  } else if (r.copied) {
+                    setKiwiHint(`${r.message} · 상품명 복사됨`);
+                  } else {
+                    setKiwiHint(null);
+                  }
+                }}
               >
-                아이템스카우트에서 보기 ↗
-              </a>
+                아이템스카우트 키워드 분석 ↗{isAndroidDevice() ? ' (Kiwi)' : ''}
+              </button>
             </div>
+            {kiwiHint && (
+              <p className="notice" role="status">
+                {kiwiHint}
+              </p>
+            )}
           </section>
         )}
       </main>
 
       <footer className="app-footer">
-        <p>최저가 출처: 네이버 쇼핑 · 기타 지표: 아이템스카우트(선택)</p>
+        <p>가격비교: 네이버 쇼핑 · 키워드 추세·경쟁강도: 아이템스카우트 API 연동 시에만 표시</p>
       </footer>
     </div>
   );
@@ -354,6 +440,3 @@ function fmt(n: number) {
   return n.toLocaleString('ko-KR');
 }
 
-function fmtPrice(n: number) {
-  return `${n.toLocaleString('ko-KR')}원`;
-}

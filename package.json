@@ -4,7 +4,11 @@
   "private": true,
   "description": "상품캡처 및 가격조회 — 사진으로 상품을 인식하고 아이템스카우트 시장 데이터를 조회합니다.",
   "scripts": {
-    "dev": "next dev -p 3000",
+    "dev": "node scripts/next-dev-safe.mjs",
+    "dev:fresh": "node scripts/next-dev-safe.mjs --fresh",
+    "dev:fast": "next dev -p 3000",
+    "clean": "node scripts/clean-next.mjs --kill-port --all",
+    "prebuild": "node scripts/clean-next.mjs --build",
     "build": "next build",
     "start": "next start -p 3000",
     "lint": "next lint",

@@ -1,7 +1,8 @@
 import type {
   ProductScoutResult,
   ViewTrendPoint,
-  PriceListing,
+  PriceCompare,
+  PriceCompareItem,
   ChannelCompetition,
   OverviewChartPoint,
   RatioSlice,
@@ -38,33 +39,6 @@ function buildChannelCompetition(
   };
 }
 
-function buildOverviewChart(seed: number): OverviewChartPoint[] {
-  const labels = ['월', '화', '수', '목', '금', '토', '일'];
-  return labels.map((label, i) => {
-    const searchPct = seeded(8, 22, seed, 20 + i);
-    const clickPct = seeded(5, 18, seed, 30 + i);
-    return { label, searchPct, clickPct };
-  });
-}
-
-function buildGenderClickRatio(seed: number): RatioSlice[] {
-  const male = seeded(35, 65, seed, 40);
-  return [
-    { label: '남성', pct: male },
-    { label: '여성', pct: 100 - male },
-  ];
-}
-
-function buildAgeClickRatio(seed: number): RatioSlice[] {
-  const ages = ['10대', '20대', '30대', '40대', '50대+'];
-  const weights = ages.map((_, i) => seeded(8, 30, seed, 50 + i));
-  const sum = weights.reduce((a, b) => a + b, 0);
-  return ages.map((label, i) => ({
-    label,
-    pct: Math.round((weights[i] / sum) * 1000) / 10,
-  }));
-}
-
 function hashKeyword(keyword: string): number {
   let h = 0;
   for (let i = 0; i < keyword.length; i++) {
@@ -79,95 +53,58 @@ function seeded(min: number, max: number, seed: number, offset = 0): number {
   return Math.round(min + frac * (max - min));
 }
 
-function buildWeekTrend(seed: number, baseViews: number): ViewTrendPoint[] {
-  const points: ViewTrendPoint[] = [];
-  const now = new Date();
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(now);
-    d.setDate(d.getDate() - i);
-    const label = `${d.getMonth() + 1}/${d.getDate()}`;
-    const variance = seeded(-0.15, 0.2, seed, i + 10);
-    const views = Math.max(100, Math.round(baseViews * (1 + variance)));
-    points.push({ date: label, views });
-  }
-  return points;
+/** 네이버쇼핑 가격비교 데모 — 동일 상품명, 스크린샷 양식 */
+function buildDemoPriceCompare(productName: string, seed: number): PriceCompare {
+  const title = productName.trim() || '상품';
+  const mallLowest: PriceCompareItem[] = [
+    { name: '11번가', price: 55890 + seeded(0, 200, seed, 1), isLowest: true },
+    { name: 'G마켓', price: 59150 + seeded(0, 200, seed, 2) },
+    { name: '쿠팡', price: 78000 + seeded(0, 300, seed, 3) },
+    { name: 'MIRACLE365', price: 79000 + seeded(0, 200, seed, 4), npay: true },
+    { name: '옥션', price: 79400 + seeded(0, 200, seed, 5) },
+  ].sort((a, b) => a.price - b.price);
+  mallLowest.forEach((r, i) => {
+    r.isLowest = i === 0;
+  });
+
+  const brandCatalog: PriceCompareItem[] = [
+    { name: 'G마켓', price: 32200 + seeded(0, 200, seed, 6), isLowest: true },
+    { name: '백년친구', price: 35000 + seeded(0, 200, seed, 7), npay: true },
+    { name: '지태헬스', price: 36730 + seeded(0, 200, seed, 8), npay: true },
+    { name: 'BOTO', price: 49900 + seeded(0, 200, seed, 9), npay: true },
+  ].sort((a, b) => a.price - b.price);
+  brandCatalog.forEach((r, i) => {
+    r.isLowest = i === 0;
+  });
+
+  const lowestPrice = Math.min(mallLowest[0].price, brandCatalog[0].price);
+  return {
+    productName: title,
+    lowestPrice,
+    mallLowest,
+    brandCatalog,
+    compareUrl: `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(title)}`,
+  };
 }
 
-/** 동일상품 가격비교 — 최소 사이트 수 */
-export const MIN_PRICE_COMPARE_SITES = 5;
+import { fetchNaverPriceCompare } from '@/lib/naver-shopping';
+import { EMPTY_ITEMSCOUT_METRICS } from '@/lib/itemscout/empty-metrics';
 
-const PRICE_COMPARE_SITES = [
-  '네이버쇼핑',
-  '쿠팡',
-  'G마켓',
-  '11번가',
-  '옥션',
-  '스마트스토어',
-  '위메프',
-];
-
-/** 동일상품 기준 사이트별 가격 (최소 5개 사이트) */
-function buildDemoPrices(productName: string, seed: number): PriceListing[] {
-  const base = seeded(8000, 45000, seed, 1);
-  const items = PRICE_COMPARE_SITES.slice(0, MIN_PRICE_COMPARE_SITES).map((mall, i) => ({
-    rank: i + 1,
-    productName,
-    price: base + seeded(0, 12000, seed, i + 2),
-    mallName: mall,
-  }));
-  return items.sort((a, b) => a.price - b.price).map((p, i) => ({ ...p, rank: i + 1 }));
-}
-
-/**
- * 동일상품 가격비교: 서로 다른 사이트 최소 N개 보장.
- * API 결과가 부족하면 데모 사이트로 보강한다.
- */
-export function ensureMinPriceSites(
-  prices: PriceListing[],
-  productName: string,
-  seed: number,
-  minSites = MIN_PRICE_COMPARE_SITES,
-): PriceListing[] {
-  const byMall = new Map<string, PriceListing>();
-  for (const p of prices) {
-    const key = p.mallName.trim() || '미상';
-    const existing = byMall.get(key);
-    if (!existing || p.price < existing.price) {
-      byMall.set(key, { ...p, productName: productName || p.productName });
-    }
-  }
-
-  if (byMall.size < minSites) {
-    const fallback = buildDemoPrices(productName, seed);
-    for (const p of fallback) {
-      if (byMall.size >= minSites) break;
-      if (!byMall.has(p.mallName)) byMall.set(p.mallName, p);
-    }
-  }
-
-  return [...byMall.values()]
-    .sort((a, b) => a.price - b.price)
-    .slice(0, Math.max(minSites, byMall.size))
-    .map((p, i) => ({ ...p, rank: i + 1, productName: productName || p.productName }));
-}
-
-import { fetchNaverLowestPrices } from '@/lib/naver-shopping';
-
-/** 키워드 기반 데모 + 네이버 쇼핑 최저가(키 있을 때) */
+/** 키워드 기반 데모 + 네이버쇼핑 가격비교(키 있을 때) */
 export async function buildMarketResult(
   keyword: string,
   productName: string,
   category?: string,
 ): Promise<ProductScoutResult> {
   const base = buildDemoScoutResult(keyword, productName, category);
-  const seed = hashKeyword(keyword);
   try {
-    const naver = await fetchNaverLowestPrices(keyword);
-    if (naver.prices.length) {
+    const naver = await fetchNaverPriceCompare(keyword, productName);
+    const hasData =
+      naver.priceCompare.mallLowest.length > 0 || naver.priceCompare.brandCatalog.length > 0;
+    if (hasData) {
       return {
         ...base,
-        lowestPrices: ensureMinPriceSites(naver.prices, productName, seed),
-        competingProducts: naver.totalProducts,
+        priceCompare: naver.priceCompare,
         source: 'naver',
         priceSource: 'naver',
       };
@@ -178,46 +115,20 @@ export async function buildMarketResult(
   return { ...base, priceSource: 'demo' };
 }
 
-/** API 키 없을 때 키워드 기반 데모 데이터 */
+/** API 키 없을 때 — 가격비교 데모만, 지표·차트는 비움 */
 export function buildDemoScoutResult(
   keyword: string,
   productName: string,
   category?: string,
 ): ProductScoutResult {
   const seed = hashKeyword(keyword);
-  const weeklyViews = seeded(1200, 48000, seed, 3);
-  const weeklySales = seeded(15, 420, seed, 5);
-
-  // 네이버: 예시 스펙(상품수 8 · 한 달 검색수 20 · 경쟁강도 0.40)을 기본으로 시드 변형
-  const naverProducts = Math.max(1, seeded(5, 24, seed, 4));
-  const naverSearches = Math.max(naverProducts, seeded(15, 60, seed, 5));
-  const coupangProducts = Math.max(1, seeded(6, 30, seed, 6));
-  const coupangSearches = Math.max(coupangProducts, seeded(12, 55, seed, 7));
-
-  const competitionByChannel = [
-    buildChannelCompetition('naver', '네이버', naverProducts, naverSearches),
-    buildChannelCompetition('coupang', '쿠팡', coupangProducts, coupangSearches),
-  ];
-
-  const primary = competitionByChannel[0];
-  const competingProducts = primary.productCount;
-  const competitionIntensity = primary.intensity;
 
   return {
     keyword,
     productName,
     category,
-    competitionIntensity,
-    competitionLabel: primary.intensityLabel,
-    weeklyViews,
-    competingProducts,
-    weeklySales,
-    competitionByChannel,
-    overviewChart: buildOverviewChart(seed),
-    genderClickRatio: buildGenderClickRatio(seed),
-    ageClickRatio: buildAgeClickRatio(seed),
-    lowestPrices: buildDemoPrices(productName, seed),
-    viewTrend: buildWeekTrend(seed, Math.round(weeklyViews / 7)),
+    ...EMPTY_ITEMSCOUT_METRICS,
+    priceCompare: buildDemoPriceCompare(productName, seed),
     source: 'demo',
     analyzedAt: new Date().toISOString(),
   };
@@ -243,26 +154,57 @@ function pickString(obj: Record<string, unknown>, keys: string[]): string | unde
   return undefined;
 }
 
-function normalizePrices(raw: unknown): PriceListing[] {
+function normalizePriceCompareItems(raw: unknown): PriceCompareItem[] {
   if (!Array.isArray(raw)) return [];
-  const items: PriceListing[] = [];
-  for (let i = 0; i < raw.length && i < 10; i++) {
-    const row = raw[i];
+  const items: PriceCompareItem[] = [];
+  for (const row of raw) {
     if (!row || typeof row !== 'object') continue;
     const o = row as Record<string, unknown>;
     const price = pickNumber(o, ['price', 'lowestPrice', 'salePrice', 'amount', 'minPrice']);
-    const name = pickString(o, ['productName', 'name', 'title', 'goodsName']);
-    const mall = pickString(o, ['mallName', 'mall', 'shopName', 'storeName', 'seller']);
+    const name = pickString(o, ['name', 'mallName', 'brand', 'shopName', 'storeName', 'seller']);
     if (price == null || !name) continue;
     items.push({
-      rank: items.length + 1,
-      productName: name,
+      name,
       price,
-      mallName: mall ?? '미상',
+      badge: pickString(o, ['badge', 'membership', 'label']),
       url: pickString(o, ['url', 'link', 'productUrl']),
     });
   }
-  return items.sort((a, b) => a.price - b.price).map((p, idx) => ({ ...p, rank: idx + 1 }));
+  return items.sort((a, b) => a.price - b.price);
+}
+
+function normalizeOverviewChart(raw: unknown): OverviewChartPoint[] {
+  if (!Array.isArray(raw)) return [];
+  const points: OverviewChartPoint[] = [];
+  for (const row of raw) {
+    if (!row || typeof row !== 'object') continue;
+    const o = row as Record<string, unknown>;
+    const searchPct = pickNumber(o, ['searchPct', 'searchPercent', 'searchRatio', 'search']);
+    const clickPct = pickNumber(o, ['clickPct', 'clickPercent', 'clickRatio', 'click']);
+    const label =
+      pickString(o, ['label', 'date', 'month', 'period']) ?? `M${points.length + 1}`;
+    if (searchPct == null && clickPct == null) continue;
+    points.push({
+      label,
+      searchPct: searchPct ?? 0,
+      clickPct: clickPct ?? 0,
+    });
+  }
+  return points.slice(-12);
+}
+
+function normalizeRatioSlices(raw: unknown): RatioSlice[] {
+  if (!Array.isArray(raw)) return [];
+  const slices: RatioSlice[] = [];
+  for (const row of raw) {
+    if (!row || typeof row !== 'object') continue;
+    const o = row as Record<string, unknown>;
+    const label = pickString(o, ['label', 'name', 'age', 'gender']);
+    const pct = pickNumber(o, ['pct', 'percent', 'ratio', 'value']);
+    if (!label || pct == null) continue;
+    slices.push({ label, pct });
+  }
+  return slices;
 }
 
 function normalizeTrend(raw: unknown): ViewTrendPoint[] {
@@ -278,7 +220,7 @@ function normalizeTrend(raw: unknown): ViewTrendPoint[] {
     if (views == null) continue;
     points.push({ date: date ?? `D${points.length + 1}`, views });
   }
-  return points.slice(-7);
+  return points.slice(-12);
 }
 
 /** B2B API 응답을 앱 표시 형식으로 정규화 (필드명 유연 매핑) */
@@ -317,7 +259,7 @@ function normalizeApiResponse(
     'salesVolumeWeek',
     'purchaseCount',
   ]);
-  const competitionIntensity = pickNumber(payload, [
+  const rawCompetitionIntensity = pickNumber(payload, [
     'competitionIntensity',
     'competition',
     'competitionScore',
@@ -325,69 +267,110 @@ function normalizeApiResponse(
     'competitionLevel',
   ]);
 
-  const lowestPrices = normalizePrices(
-    payload.lowestPrices ?? payload.priceList ?? payload.products ?? payload.items ?? payload.goods,
+  const pricePayload =
+    payload.priceCompare && typeof payload.priceCompare === 'object'
+      ? (payload.priceCompare as Record<string, unknown>)
+      : null;
+  const mallLowest = normalizePriceCompareItems(
+    pricePayload?.mallLowest ?? payload.mallLowest ?? payload.lowestPrices,
+  );
+  const brandCatalog = normalizePriceCompareItems(
+    pricePayload?.brandCatalog ?? payload.brandCatalog,
   );
   const viewTrend = normalizeTrend(
     payload.viewTrend ?? payload.searchTrend ?? payload.trend ?? payload.chart ?? payload.clicks,
   );
+  const overviewChart = normalizeOverviewChart(
+    payload.overviewChart ?? payload.monthlyChart ?? payload.searchClickTrend,
+  );
+  const genderClickRatio = normalizeRatioSlices(
+    payload.genderClickRatio ?? payload.genderRatio ?? payload.gender,
+  );
+  const ageClickRatio = normalizeRatioSlices(
+    payload.ageClickRatio ?? payload.ageRatio ?? payload.age,
+  );
+
+  const hasTrend = viewTrend.length > 0 || overviewChart.length > 0;
+  const hasCompetition =
+    competingProducts != null &&
+    pickNumber(payload, ['monthlySearches', 'monthlySearchCount', 'searchCountMonth']) != null;
+  const itemscoutMetricsAvailable = hasTrend || hasCompetition;
 
   if (
+    !itemscoutMetricsAvailable &&
     weeklyViews == null &&
     competingProducts == null &&
     weeklySales == null &&
-    competitionIntensity == null &&
-    !lowestPrices.length &&
-    !viewTrend.length
+    !mallLowest.length &&
+    !brandCatalog.length
   ) {
     return null;
   }
 
   const seed = hashKeyword(keyword);
   const name = pickString(payload, ['productName', 'name']) ?? productName;
-  const products = competingProducts ?? seeded(5, 24, seed, 4);
-  const monthly = Math.max(products, seeded(15, 60, seed, 5));
-  const ratio =
-    competitionIntensity != null && competitionIntensity <= 2
-      ? competitionIntensity
-      : competitionIntensity != null
-        ? Math.round((competitionIntensity / 100) * 100) / 100
-        : Math.round((products / monthly) * 100) / 100;
 
-  const competitionByChannel = [
-    buildChannelCompetition('naver', '네이버', products, monthly),
-    buildChannelCompetition(
-      'coupang',
-      '쿠팡',
-      Math.max(1, seeded(6, 30, seed, 6)),
-      Math.max(1, seeded(12, 55, seed, 7)),
-    ),
-  ];
-  if (competitionIntensity != null) {
-    competitionByChannel[0] = {
-      ...competitionByChannel[0],
-      intensity: ratio,
-      intensityLabel: intensityLabel(ratio),
-    };
+  let competitionByChannel: ChannelCompetition[] = [];
+  let competitionIntensity = 0;
+  let competitionLabel = '';
+
+  if (hasCompetition && competingProducts != null) {
+    const monthly =
+      pickNumber(payload, ['monthlySearches', 'monthlySearchCount', 'searchCountMonth']) ??
+      Math.max(competingProducts, 1);
+    const ratio =
+      rawCompetitionIntensity != null && rawCompetitionIntensity <= 2
+        ? rawCompetitionIntensity
+        : rawCompetitionIntensity != null
+          ? Math.round((rawCompetitionIntensity / 100) * 100) / 100
+          : Math.round((competingProducts / monthly) * 100) / 100;
+
+    competitionByChannel = [
+      buildChannelCompetition('naver', '네이버', competingProducts, monthly),
+      buildChannelCompetition(
+        'coupang',
+        '쿠팡',
+        pickNumber(payload, ['coupangProductCount', 'coupangProducts']) ??
+          Math.max(1, Math.round(competingProducts * 0.8)),
+        pickNumber(payload, ['coupangMonthlySearches', 'coupangSearchCount']) ??
+          Math.max(1, Math.round(monthly * 0.7)),
+      ),
+    ];
+    if (rawCompetitionIntensity != null) {
+      competitionByChannel[0] = {
+        ...competitionByChannel[0],
+        intensity: ratio,
+        intensityLabel: intensityLabel(ratio),
+      };
+    }
+    competitionIntensity = competitionByChannel[0].intensity;
+    competitionLabel = competitionByChannel[0].intensityLabel;
   }
+
+  const demoCompare = buildDemoPriceCompare(name, seed);
 
   return {
     keyword: pickString(payload, ['keyword', 'searchKeyword']) ?? keyword,
     productName: name,
     category: pickString(payload, ['category']) ?? category,
-    competitionIntensity: competitionByChannel[0].intensity,
-    competitionLabel: competitionByChannel[0].intensityLabel,
+    competitionIntensity,
+    competitionLabel,
     weeklyViews: weeklyViews ?? 0,
-    competingProducts: products,
+    competingProducts: competingProducts ?? 0,
     weeklySales: weeklySales ?? 0,
     competitionByChannel,
-    overviewChart: buildOverviewChart(seed),
-    genderClickRatio: buildGenderClickRatio(seed),
-    ageClickRatio: buildAgeClickRatio(seed),
-    lowestPrices: ensureMinPriceSites(lowestPrices, name, seed),
-    viewTrend: viewTrend.length
-      ? viewTrend
-      : buildWeekTrend(seed, Math.round((weeklyViews ?? 1000) / 7)),
+    overviewChart,
+    genderClickRatio,
+    ageClickRatio,
+    priceCompare: {
+      productName: name,
+      lowestPrice: demoCompare.lowestPrice,
+      mallLowest: mallLowest.length ? mallLowest : demoCompare.mallLowest,
+      brandCatalog: brandCatalog.length ? brandCatalog : demoCompare.brandCatalog,
+      compareUrl: `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(name)}`,
+    },
+    viewTrend,
+    itemscoutMetricsAvailable,
     source: 'itemscout',
     analyzedAt: new Date().toISOString(),
   };

@@ -7,7 +7,7 @@ interface Props {
   height?: number;
 }
 
-export function OverviewChart({ data, height = 180 }: Props) {
+export function OverviewChart({ data, height = 200 }: Props) {
   if (!data.length) {
     return <p className="chart-empty">종합 차트 데이터가 없습니다.</p>;
   }
@@ -63,9 +63,11 @@ export function OverviewChart({ data, height = 180 }: Props) {
                 rx={3}
                 className="overview-bar overview-bar--click"
               />
-              <text x={cx} y={height - 10} textAnchor="middle" className="trend-chart__label">
-                {d.label}
-              </text>
+              {(data.length <= 8 || i % 2 === 0 || i === data.length - 1) && (
+                <text x={cx} y={height - 10} textAnchor="middle" className="trend-chart__label">
+                  {d.label}
+                </text>
+              )}
             </g>
           );
         })}

@@ -12,7 +12,7 @@ export function ViewTrendChart({ data, height = 160 }: Props) {
     return <p className="chart-empty">조회 추세 데이터가 없습니다.</p>;
   }
 
-  const pad = { top: 16, right: 12, bottom: 32, left: 44 };
+  const pad = { top: 16, right: 12, bottom: 36, left: 44 };
   const width = 360;
   const innerW = width - pad.left - pad.right;
   const innerH = height - pad.top - pad.bottom;
@@ -36,7 +36,7 @@ export function ViewTrendChart({ data, height = 160 }: Props) {
   }));
 
   return (
-    <svg className="trend-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="최근 1주간 조회 추세">
+    <svg className="trend-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="최근 12개월 조회 추세">
       <defs>
         <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#2563eb" stopOpacity="0.22" />
@@ -53,10 +53,14 @@ export function ViewTrendChart({ data, height = 160 }: Props) {
       ))}
       <path d={areaPath} fill="url(#trendFill)" />
       <path d={linePath} className="trend-chart__line" fill="none" />
-      {points.map(p => (
+      {points.map((p, i) => (
         <g key={p.date}>
-          <circle cx={p.x} cy={p.y} r={4} className="trend-chart__dot" />
-          <text x={p.x} y={height - 8} textAnchor="middle" className="trend-chart__label">{p.date}</text>
+          <circle cx={p.x} cy={p.y} r={3.5} className="trend-chart__dot" />
+          {(data.length <= 8 || i % 2 === 0 || i === data.length - 1) && (
+            <text x={p.x} y={height - 8} textAnchor="middle" className="trend-chart__label">
+              {p.date}
+            </text>
+          )}
         </g>
       ))}
     </svg>
