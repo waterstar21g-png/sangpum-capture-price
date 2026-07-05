@@ -3,9 +3,19 @@ import type { ProductVisionResult } from '@/lib/itemscout/types';
 export interface ProductVisionInput {
   imageDataUrl: string;
   hint?: string;
+  /** 모바일 절약 — 짧은 프롬프트·적은 토큰 */
+  economy?: boolean;
 }
 
-function buildProductVisionPrompt(): string {
+function buildProductVisionPrompt(economy?: boolean): string {
+  if (economy) {
+    return `한국 이커머스 상품 사진 분석. JSON만: productName, keyword, category, description, confidence
+productName: 한국어 상품명(80자)
+keyword: 검색 키워드 1개(2~6단어)
+category: 카테고리
+description: 1문장
+confidence: 0~1`;
+  }
   return `당신은 한국 이커머스 상품 분석 전문가입니다.
 사진에서 판매 상품을 식별하고 네이버 쇼핑·스마트스토어 키워드 검색에 적합한 키워드를 추출하세요.
 JSON만 반환 (마크다운 금지). 키: productName, keyword, category, description, confidence
@@ -47,10 +57,10 @@ export async function analyzeProductImage(
     body: JSON.stringify({
       model,
       temperature: 0.3,
-      max_tokens: 600,
+      max_tokens: input.economy ? 280 : 600,
       response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: buildProductVisionPrompt() },
+        { role: 'system', content: buildProductVisionPrompt(input.economy) },
         { role: 'user', content: userParts },
       ],
     }),

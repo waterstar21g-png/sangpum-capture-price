@@ -17,6 +17,8 @@ interface Props {
   keyword: string;
   /** 복사용 원본 상품명 — 변형·잘림 없음 */
   copyProductName?: string;
+  /** 모바일 절약 — 결과 진입 시 자동 복사 끔 */
+  skipAutoCopy?: boolean;
   /** 네이버 채널 경쟁강도 (키워드 분석 패널) */
   naverProductCount?: number;
   naverMonthlySearches?: number;
@@ -27,6 +29,7 @@ export function MarketShortcuts({
   productName,
   keyword,
   copyProductName,
+  skipAutoCopy = false,
   naverProductCount,
   naverMonthlySearches,
   naverIntensity,
@@ -49,8 +52,9 @@ export function MarketShortcuts({
     compareUrl: string;
   } | null>(null);
 
-  // 결과 화면 진입 시 상품명을 클립보드에 미리 보관 (붙여넣기 직전 단계)
+  // 결과 화면 진입 시 상품명 클립보드 보관 (모바일 절약 시 생략)
   useEffect(() => {
+    if (skipAutoCopy) return;
     let cancelled = false;
     (async () => {
       const { copied } = await copyProductNameForPaste(pasteText, keyword);
@@ -64,7 +68,7 @@ export function MarketShortcuts({
     return () => {
       cancelled = true;
     };
-  }, [productName, keyword, pasteText]);
+  }, [productName, keyword, pasteText, skipAutoCopy]);
 
   if (!searchText) return null;
 

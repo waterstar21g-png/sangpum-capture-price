@@ -21,7 +21,7 @@ interface Props {
 }
 
 /** 상품 힌트 입력 (draft만 저장, 이력은 통합 목록) */
-export function PersistedHintInput(props: Props) {
+export function PersistedHintInput(props: Props & { onCommitSearch?: (text: string) => void }) {
   return (
     <div className="field field--persisted">
       <label className="field__label" htmlFor={props.id}>
@@ -31,9 +31,15 @@ export function PersistedHintInput(props: Props) {
         id={props.id}
         type="text"
         inputMode="text"
-        enterKeyHint="next"
+        enterKeyHint="search"
         value={props.value}
         onChange={e => props.onChange(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter' && props.onCommitSearch) {
+            e.preventDefault();
+            props.onCommitSearch(props.value);
+          }
+        }}
         placeholder={props.placeholder}
         disabled={props.disabled}
         autoComplete="off"
@@ -48,6 +54,8 @@ interface KeywordProps extends Props {
   onCommitSearch: (text: string) => void;
   searchHistory?: SearchHistoryEntry[];
   onPickEntry?: (entry: SearchHistoryEntry) => void;
+  /** 모바일 절약 — datalist 선택 시 자동검색 끔 */
+  skipInputAutoSearch?: boolean;
 }
 
 /** 키워드 직접 입력 + 통합 최근 검색 이력 */
@@ -61,6 +69,7 @@ export function PersistedKeywordInput({
   searchHistory = [],
   onPickEntry,
   onCommitSearch,
+  skipInputAutoSearch = false,
 }: KeywordProps) {
   const listId = `${id}-history-list`;
   const datalistValues = searchHistory.map(e => e.productName || e.keyword);
@@ -84,6 +93,7 @@ export function PersistedKeywordInput({
         value={value}
         onChange={e => onChange(e.target.value)}
         onInput={e => {
+          if (skipInputAutoSearch) return;
           const hit = findHistoryMatch(e.currentTarget.value);
           if (hit && onPickEntry) onPickEntry(hit);
         }}

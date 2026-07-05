@@ -14,6 +14,7 @@ import { isAndroidDevice } from '@/lib/kiwi-browser';
 import { saveCaptureToGallery } from '@/lib/save-capture-gallery';
 import { entryImageSrc, persistSearchImageToDb } from '@/lib/search-image-client';
 import { PersistedHintInput, PersistedKeywordInput, usePersistedInputs } from './PersistedInput';
+import { loadMobileSaveMode, saveMobileSaveMode } from '@/lib/mobile-save-mode';
 import { SearchHistoryPanel } from './SearchHistoryPanel';
 
 type ActiveField = 'image' | 'hint' | 'keyword';
@@ -48,6 +49,11 @@ export function ProductCaptureApp() {
   const [busy, setBusy] = useState(false);
   const textTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skipKeywordEffectsRef = useRef(false);
+  const [mobileSave, setMobileSave] = useState(false);
+
+  useEffect(() => {
+    setMobileSave(loadMobileSaveMode());
+  }, []);
 
   useEffect(() => () => { if (textTimerRef.current) clearTimeout(textTimerRef.current); }, []);
 
@@ -152,10 +158,27 @@ export function ProductCaptureApp() {
   }
 
   function queueTextSearch(text: string) {
+    if (mobileSave) return;
     if (textTimerRef.current) clearTimeout(textTimerRef.current);
     const trimmed = text.trim();
     if (!trimmed) return;
     textTimerRef.current = setTimeout(() => void searchByText(trimmed), 450);
+  }
+
+  function toggleMobileSave() {
+    const next = !mobileSave;
+    setMobileSave(next);
+    saveMobileSaveMode(next);
+    if (textTimerRef.current) clearTimeout(textTimerRef.current);
+  }
+
+  function commitHintSearch(text: string) {
+    if (textTimerRef.current) clearTimeout(textTimerRef.current);
+    const trimmed = text.trim();
+    if (!trimmed || busy) return;
+    clearExcept('hint');
+    setHint(trimmed);
+    void searchByText(trimmed);
   }
 
   async function searchByImage(dataUrl: string, thumb: string) {
@@ -165,10 +188,21 @@ export function ProductCaptureApp() {
     setVisionInfo(null);
     setBusy(true);
     try {
+      const body: Record<string, unknown> = {
+        imageDataUrl: dataUrl,
+        searchPriority: 'productName',
+      };
+      if (mobileSave) {
+        body.economyVision = true;
+        if (hint.trim()) {
+          body.hint = hint.trim();
+          body.skipVision = true;
+        }
+      }
       const res = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageDataUrl: dataUrl, searchPriority: 'productName' }),
+        body: JSON.stringify(body),
       });
       await finishSearch(res, { imageThumb: thumb, displayImageUrl: dataUrl });
     } catch (e) {
@@ -323,6 +357,19 @@ export function ProductCaptureApp() {
             사진은 아래 <strong>한 곳</strong>에만 표시됩니다.
           </p>
 
+          <label className="mobile-save">
+            <input
+              type="checkbox"
+              checked={mobileSave}
+              onChange={toggleMobileSave}
+              disabled={busy}
+            />
+            <span className="mobile-save__label">
+              <strong>모바일 절약</strong> — 입력 중 자동검색 끔 · AI 토큰 최소화
+              {mobileSave && <em className="mobile-save__hint"> (Enter·이력·촬영 시에만 검색)</em>}
+            </span>
+          </label>
+
           <div className="btn-row">
             <button type="button" className="btn btn--primary" onClick={() => cameraRef.current?.click()} disabled={busy}>
               카메라 촬영
@@ -340,6 +387,7 @@ export function ProductCaptureApp() {
             label="상품 힌트"
             value={hint}
             onChange={onHintChange}
+            onCommitSearch={commitHintSearch}
             placeholder="예: 유기농 현미 2kg"
             disabled={busy}
           />
@@ -356,6 +404,7 @@ export function ProductCaptureApp() {
             searchHistory={searchHistory}
             onPickEntry={onPickHistoryEntry}
             onCommitSearch={commitKeywordSearch}
+            skipInputAutoSearch={mobileSave}
           />
 
           {searchHistory.length > 0 && (
@@ -423,6 +472,7 @@ export function ProductCaptureApp() {
               productName={result.productName}
               keyword={result.keyword}
               copyProductName={originalProductName ?? result.productName}
+              skipAutoCopy={mobileSave}
               naverProductCount={
                 result.itemscoutMetricsAvailable
                   ? result.competitionByChannel?.find(c => c.channel === 'naver')?.productCount
