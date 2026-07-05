@@ -1,0 +1,29 @@
+name: Deploy Vercel (with DB)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Init DB schema
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: node scripts/init-db-schema.mjs
+      - name: Deploy to Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          npx vercel link --yes --scope nutrifarmer-front --project sangpum-capture-price --token "$VERCEL_TOKEN"
+          echo "$DATABASE_URL" | npx vercel env add DATABASE_URL production --token "$VERCEL_TOKEN" --scope nutrifarmer-front --force || true
+          npx vercel --prod --yes --scope nutrifarmer-front --token "$VERCEL_TOKEN"
