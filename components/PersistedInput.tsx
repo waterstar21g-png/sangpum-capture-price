@@ -5,9 +5,12 @@ import {
   loadInputStore,
   saveInputDraft,
   pushSearchHistory,
+  mergeSearchHistoryWithDb,
+  saveSearchHistory,
   MAX_HISTORY,
   type SearchHistoryEntry,
 } from '@/lib/input-history';
+import { entryImageSrc, fetchSessionSearchImages } from '@/lib/search-image-client';
 
 interface Props {
   id: string;
@@ -120,9 +123,9 @@ function SearchHistoryList({
           {items.map(entry => (
             <li key={`${entry.searchedAt}-${entryDedupeKey(entry)}`}>
               <button type="button" className="input-history__chip-rich" onClick={() => onPick(entry)}>
-                {entry.imageThumb && (
+                {entryImageSrc(entry) && (
                   <img
-                    src={entry.imageThumb}
+                    src={entryImageSrc(entry)}
                     alt=""
                     className="input-history__thumb"
                     aria-hidden
@@ -162,6 +165,13 @@ export function usePersistedInputs() {
     setManualKeyword(store.keyword);
     setSearchHistory(store.searchHistory);
     setHydrated(true);
+
+    void fetchSessionSearchImages().then(fromDb => {
+      if (!fromDb.length) return;
+      const merged = mergeSearchHistoryWithDb(store.searchHistory, fromDb);
+      setSearchHistory(merged);
+      saveSearchHistory(merged);
+    });
   }, []);
 
   useEffect(() => {
@@ -179,6 +189,8 @@ export function usePersistedInputs() {
     productName: string;
     hint?: string;
     imageThumb?: string;
+    imageId?: string;
+    imageUrl?: string;
   }) {
     const next = pushSearchHistory(params);
     setSearchHistory(next);

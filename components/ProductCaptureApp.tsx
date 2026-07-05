@@ -11,6 +11,7 @@ import { RatioBars } from './RatioBars';
 import { PriceComparePanel } from './PriceComparePanel';
 import { openItemscoutInKiwi } from '@/lib/itemscout/open-keyword';
 import { isAndroidDevice } from '@/lib/kiwi-browser';
+import { entryImageSrc, persistSearchImageToDb } from '@/lib/search-image-client';
 import { PersistedHintInput, PersistedKeywordInput, usePersistedInputs } from './PersistedInput';
 
 type ActiveField = 'image' | 'hint' | 'keyword';
@@ -106,15 +107,16 @@ export function ProductCaptureApp() {
 
   function onPickHistoryEntry(entry: SearchHistoryEntry) {
     const text = (entry.productName || entry.keyword).trim();
-    if (entry.imageThumb) {
+    const imgSrc = entryImageSrc(entry);
+    if (imgSrc) {
       if (cameraRef.current) cameraRef.current.value = '';
       if (galleryRef.current) galleryRef.current.value = '';
       setHint(entry.hint ?? '');
       applyKeywordValue(text);
-      setPreview(entry.imageThumb);
-      setSearchImageUrl(entry.imageThumb);
-      setImageThumb(entry.imageThumb);
-      if (text) void searchByText(text, entry.imageThumb, entry.imageThumb);
+      setPreview(imgSrc);
+      setSearchImageUrl(imgSrc);
+      setImageThumb(imgSrc);
+      if (text) void searchByText(text, imgSrc, imgSrc, entry.imageId, entry.imageUrl);
       return;
     }
     clearExcept('keyword');
@@ -149,7 +151,13 @@ export function ProductCaptureApp() {
     }
   }
 
-  async function searchByText(text: string, keepImageThumb?: string, displayImageUrl?: string) {
+  async function searchByText(
+    text: string,
+    keepImageThumb?: string,
+    displayImageUrl?: string,
+    keepImageId?: string,
+    keepImageUrl?: string,
+  ) {
     setError(null);
     setResult(null);
     setVisionInfo(null);
@@ -174,7 +182,17 @@ export function ProductCaptureApp() {
           searchPriority: 'productName',
         }),
       });
-      await finishSearch(res, keepImageThumb ? { imageThumb: keepImageThumb, displayImageUrl } : undefined);
+      await finishSearch(
+        res,
+        keepImageThumb || keepImageUrl
+          ? {
+              imageThumb: keepImageThumb,
+              displayImageUrl,
+              imageId: keepImageId,
+              imageUrl: keepImageUrl,
+            }
+          : undefined,
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : '분석에 실패했습니다.');
     } finally {
@@ -184,19 +202,39 @@ export function ProductCaptureApp() {
 
   async function finishSearch(
     res: Response,
-    options?: { imageThumb?: string; displayImageUrl?: string; hint?: string },
+    options?: {
+      imageThumb?: string;
+      displayImageUrl?: string;
+      imageId?: string;
+      imageUrl?: string;
+      hint?: string;
+    },
   ) {
     const data = await parseAnalyzeResponse(res);
     if (!res.ok || !data.ok || !data.scout) {
       throw new Error(data.message ?? '분석에 실패했습니다.');
     }
     const thumb = options?.imageThumb;
-    if (options?.displayImageUrl) {
-      setPreview(options.displayImageUrl);
-      setSearchImageUrl(options.displayImageUrl);
-    } else if (thumb) {
-      setPreview(thumb);
-      setSearchImageUrl(thumb);
+    let imageId = options?.imageId;
+    let imageUrl = options?.imageUrl;
+
+    if (thumb && !imageUrl) {
+      const stored = await persistSearchImageToDb({
+        imageDataUrl: thumb,
+        productName: data.scout.productName,
+        keyword: data.scout.productName,
+        hint: options?.hint,
+      });
+      if (stored) {
+        imageId = stored.imageId;
+        imageUrl = stored.imageUrl;
+      }
+    }
+
+    const displayUrl = imageUrl || options?.displayImageUrl || thumb;
+    if (displayUrl) {
+      setPreview(displayUrl);
+      setSearchImageUrl(displayUrl);
     }
     if (thumb) setImageThumb(thumb);
     setResult(data.scout);
@@ -206,7 +244,9 @@ export function ProductCaptureApp() {
       keyword: data.scout.productName,
       productName: data.scout.productName,
       hint: options?.hint,
-      imageThumb: thumb,
+      imageThumb: imageUrl ? undefined : thumb,
+      imageId,
+      imageUrl,
     });
   }
 
