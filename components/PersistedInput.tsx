@@ -10,7 +10,7 @@ import {
   MAX_HISTORY,
   type SearchHistoryEntry,
 } from '@/lib/input-history';
-import { entryImageSrc, fetchSessionSearchImages } from '@/lib/search-image-client';
+import { fetchSessionSearchImages } from '@/lib/search-image-client';
 
 interface Props {
   id: string;
@@ -123,14 +123,6 @@ function SearchHistoryList({
           {items.map(entry => (
             <li key={`${entry.searchedAt}-${entryDedupeKey(entry)}`}>
               <button type="button" className="input-history__chip-rich" onClick={() => onPick(entry)}>
-                {entryImageSrc(entry) && (
-                  <img
-                    src={entryImageSrc(entry)}
-                    alt=""
-                    className="input-history__thumb"
-                    aria-hidden
-                  />
-                )}
                 <span className="input-history__chip-body">
                   <span className="input-history__name">{entry.productName}</span>
                   {entry.keyword !== entry.productName && (

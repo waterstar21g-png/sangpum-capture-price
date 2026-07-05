@@ -281,36 +281,8 @@ export function ProductCaptureApp() {
           <h2 className="panel__title">상품 캡처</h2>
           <p className="panel__lead">
             카메라·갤러리·힌트·키워드 중 하나만 사용합니다. 조작 시 <strong>나머지는 자동 삭제</strong> 후 <strong>새 검색</strong>합니다.
-            결과가 있어도 이 입력창은 그대로 유지됩니다.
+            사진은 아래 <strong>한 곳</strong>에만 표시됩니다.
           </p>
-
-          <div className="capture-box">
-            {(preview || searchImageUrl) ? (
-              <>
-                <img src={preview || searchImageUrl || ''} alt="선택한 상품" className="capture-box__img" />
-                <button
-                  type="button"
-                  className="capture-box__clear"
-                  onClick={() => {
-                    setPreview(null);
-                    setSearchImageUrl(null);
-                    setImageThumb(null);
-                    if (cameraRef.current) cameraRef.current.value = '';
-                    if (galleryRef.current) galleryRef.current.value = '';
-                  }}
-                  disabled={busy}
-                  aria-label="선택한 사진 제거"
-                >
-                  ✕
-                </button>
-              </>
-            ) : (
-              <div className="capture-box__empty">
-                <span aria-hidden>📦</span>
-                <p>상품 사진을 촬영하거나<br />갤러리에서 선택하세요</p>
-              </div>
-            )}
-          </div>
 
           <div className="btn-row">
             <button type="button" className="btn btn--primary" onClick={() => cameraRef.current?.click()} disabled={busy}>
@@ -347,6 +319,34 @@ export function ProductCaptureApp() {
           />
 
           {error && <p className="alert" role="alert">{error}</p>}
+
+          <div className="capture-box capture-box--footer">
+            {(preview || searchImageUrl) ? (
+              <>
+                <img src={preview || searchImageUrl || ''} alt="선택한 상품" className="capture-box__img" />
+                <button
+                  type="button"
+                  className="capture-box__clear"
+                  onClick={() => {
+                    setPreview(null);
+                    setSearchImageUrl(null);
+                    setImageThumb(null);
+                    if (cameraRef.current) cameraRef.current.value = '';
+                    if (galleryRef.current) galleryRef.current.value = '';
+                  }}
+                  disabled={busy}
+                  aria-label="선택한 사진 제거"
+                >
+                  ✕
+                </button>
+              </>
+            ) : (
+              <div className="capture-box__empty">
+                <span aria-hidden>📦</span>
+                <p>상품 사진을 촬영하거나 갤러리에서 선택하세요</p>
+              </div>
+            )}
+          </div>
         </section>
 
         {busy && (
@@ -359,11 +359,6 @@ export function ProductCaptureApp() {
 
         {result && !busy && (
           <section className="result">
-            {searchImageUrl && (
-              <div className="result__photo">
-                <img src={searchImageUrl} alt={result.productName} className="result__photo-img" />
-              </div>
-            )}
             <div className="result__meta">
               <span className={`badge badge--${result.source}`}>
                 {result.source === 'naver' ? '네이버 쇼핑' : result.source === 'itemscout' ? '아이템스카우트' : '데모 데이터'}
