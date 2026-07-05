@@ -31,31 +31,25 @@ export function itemscoutKeywordAnalysisUrl(productName: string, keyword?: strin
   return `/api/itemscout-redirect?q=${encodeURIComponent(text)}`;
 }
 
+/** 캡처·결과 화면 바로가기 — 6개만 (기타 삭제) */
+export const CAPTURE_SHORTCUT_IDS = [
+  'coupang',
+  'naver',
+  'naver-shopping',
+  'domeggook',
+  'domeme',
+  'alibaba',
+] as const;
+
+export type CaptureShortcutId = (typeof CAPTURE_SHORTCUT_IDS)[number];
+
+export function filterMarketShortcuts(ids: readonly string[] = CAPTURE_SHORTCUT_IDS) {
+  const set = new Set(ids);
+  return MARKET_SHORTCUTS.filter(s => set.has(s.id));
+}
+
 /** 결과 화면 바로가기 마켓 목록 */
 export const MARKET_SHORTCUTS: MarketShortcut[] = [
-  {
-    id: 'itemscout',
-    label: '아이템스카우트',
-    mark: '스',
-    color: '#7c3aed',
-    buildUrl: q => itemscoutKeywordAnalysisUrl(q.productName, q.keyword),
-  },
-  {
-    id: 'naver',
-    label: '쇼핑앱',
-    mark: 'N',
-    color: '#03c75a',
-    buildUrl: q =>
-      `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(shortcutSearchText(q))}`,
-  },
-  {
-    id: 'naver-shopping',
-    label: '가격비교',
-    mark: '比',
-    color: '#00a84d',
-    buildUrl: q =>
-      `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(shortcutSearchText(q))}`,
-  },
   {
     id: 'coupang',
     label: '쿠팡',
@@ -63,6 +57,22 @@ export const MARKET_SHORTCUTS: MarketShortcut[] = [
     color: '#e31837',
     buildUrl: q =>
       `https://www.coupang.com/np/search?q=${encodeURIComponent(shortcutSearchText(q))}`,
+  },
+  {
+    id: 'naver',
+    label: '네이버',
+    mark: 'N',
+    color: '#03c75a',
+    buildUrl: q =>
+      `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(shortcutSearchText(q))}`,
+  },
+  {
+    id: 'naver-shopping',
+    label: '비교',
+    mark: '比',
+    color: '#00a84d',
+    buildUrl: q =>
+      `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(shortcutSearchText(q))}`,
   },
   {
     id: 'domeggook',
@@ -79,32 +89,15 @@ export const MARKET_SHORTCUTS: MarketShortcut[] = [
     color: '#0ea5e9',
     buildUrl: q => {
       const text = encodeURIComponent(shortcutSearchText(q));
-      // domeme.com/goods/goods_search.php 는 폐기됨 → domemedb 상품검색 사용
       return `https://domemedb.domeggook.com/index/item/supplyList.php?sf=subject&sw=${text}&fromOversea=2`;
     },
   },
   {
-    id: '1688',
-    label: '1688',
-    mark: '16',
-    color: '#ff6a00',
-    buildUrl: q =>
-      `https://s.1688.com/selloffer/offer_search.htm?keywords=${encodeURIComponent(shortcutSearchText(q))}`,
-  },
-  {
     id: 'alibaba',
-    label: 'Alibaba',
+    label: '알리',
     mark: 'Al',
     color: '#ff6a00',
     buildUrl: q =>
       `https://www.alibaba.com/trade/search?fsb=y&IndexArea=product_en&SearchText=${encodeURIComponent(shortcutSearchText(q))}`,
-  },
-  {
-    id: 'taobao',
-    label: 'TaoBao',
-    mark: '淘',
-    color: '#ff5000',
-    buildUrl: q =>
-      `https://s.taobao.com/search?q=${encodeURIComponent(shortcutSearchText(q))}`,
   },
 ];

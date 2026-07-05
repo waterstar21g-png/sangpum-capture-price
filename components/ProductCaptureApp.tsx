@@ -11,10 +11,12 @@ import { RatioBars } from './RatioBars';
 import { PriceComparePanel } from './PriceComparePanel';
 import { openItemscoutInKiwi } from '@/lib/itemscout/open-keyword';
 import { isAndroidDevice } from '@/lib/kiwi-browser';
-import { PersistedHintInput, PersistedKeywordInput, usePersistedInputs } from './PersistedInput';
+import { CaptureSideShortcuts, type CaptureNaverPreview } from './CaptureSideShortcuts';
+import { NaverShoppingPreview } from './NaverShoppingPreview';
+import { PersistedKeywordInput, SearchHistoryPanel, usePersistedInputs } from './PersistedInput';
 
 type Step = 'capture' | 'analyzing' | 'result';
-type ActiveField = 'image' | 'hint' | 'keyword';
+type ActiveField = 'image' | 'keyword';
 
 interface AnalyzeResponse {
   ok: boolean;
@@ -29,8 +31,6 @@ export function ProductCaptureApp() {
   const [step, setStep] = useState<Step>('capture');
   const [preview, setPreview] = useState<string | null>(null);
   const {
-    hint,
-    setHint,
     manualKeyword,
     setManualKeyword,
     searchHistory,
@@ -41,6 +41,8 @@ export function ProductCaptureApp() {
   const [error, setError] = useState<string | null>(null);
   const [kiwiHint, setKiwiHint] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [shortcutHint, setShortcutHint] = useState<string | null>(null);
+  const [capturePreview, setCapturePreview] = useState<CaptureNaverPreview | null>(null);
   const textTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const revokePreview = useCallback((url: string | null) => {
@@ -58,7 +60,6 @@ export function ProductCaptureApp() {
       if (cameraRef.current) cameraRef.current.value = '';
       if (galleryRef.current) galleryRef.current.value = '';
     }
-    if (active !== 'hint') setHint('');
     if (active !== 'keyword') setManualKeyword('');
   }
 
@@ -74,12 +75,6 @@ export function ProductCaptureApp() {
     setResult(null);
     setVisionInfo(null);
     await searchByImage(file);
-  }
-
-  function onHintChange(value: string) {
-    clearExcept('hint');
-    setHint(value);
-    queueTextSearch(value);
   }
 
   function onKeywordChange(value: string) {
@@ -164,7 +159,6 @@ export function ProductCaptureApp() {
   function reset() {
     revokePreview(preview);
     setPreview(null);
-    setHint('');
     setManualKeyword('');
     setResult(null);
     setVisionInfo(null);
@@ -190,71 +184,81 @@ export function ProductCaptureApp() {
       <main className="app-main">
         {step === 'capture' && (
           <section className="panel">
-            <h2 className="panel__title">상품 캡처</h2>
-            <p className="panel__lead">
-              카메라·갤러리·힌트·키워드 중 하나만 사용합니다. 조작 시 <strong>나머지는 자동 삭제</strong> 후 바로 검색합니다.
-            </p>
+            <h2 className="panel__title">상품캡처</h2>
 
-            <div className="capture-box">
-              {preview ? (
-                <>
-                  <img src={preview} alt="선택한 상품" className="capture-box__img" />
-                  <button
-                    type="button"
-                    className="capture-box__clear"
-                    onClick={() => {
-                      revokePreview(preview);
-                      setPreview(null);
-                      if (cameraRef.current) cameraRef.current.value = '';
-                      if (galleryRef.current) galleryRef.current.value = '';
-                    }}
-                    disabled={busy}
-                    aria-label="선택한 사진 제거"
-                  >
-                    ✕
-                  </button>
-                </>
-              ) : (
-                <div className="capture-box__empty">
-                  <span aria-hidden>📦</span>
-                  <p>상품 사진을 촬영하거나<br />갤러리에서 선택하세요</p>
-                </div>
-              )}
-            </div>
-
-            <div className="btn-row">
+            <div className="btn-row capture-actions">
               <button type="button" className="btn btn--primary" onClick={() => cameraRef.current?.click()} disabled={busy}>
-                카메라 촬영
+                카메라촬영
               </button>
               <button type="button" className="btn" onClick={() => galleryRef.current?.click()} disabled={busy}>
-                갤러리 선택
+                갤러리선택
               </button>
             </div>
 
             <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="sr-only" aria-label="카메라 촬영" onChange={e => onPickFile(e.target.files?.[0])} />
             <input ref={galleryRef} type="file" accept="image/*" className="sr-only" aria-label="갤러리 선택" onChange={e => onPickFile(e.target.files?.[0])} />
 
-            <PersistedHintInput
-              id="product-hint"
-              label="상품 힌트"
-              value={hint}
-              onChange={onHintChange}
-              placeholder="예: 유기농 현미 2kg"
-              disabled={busy}
-            />
-
-            <div className="divider"><span>또는</span></div>
-
             <PersistedKeywordInput
               id="manual-keyword"
-              label="키워드 직접 입력"
+              label="키워드 직접입력"
               value={manualKeyword}
               onChange={onKeywordChange}
-              placeholder="예: 보온병 1리터"
+              placeholder=""
               disabled={busy}
-              searchHistory={searchHistory}
-              onPickEntry={onPickHistoryEntry}
+              hideHistory
             />
+
+            <div className="capture-row">
+              <div className="capture-box">
+                {preview ? (
+                  <>
+                    <img src={preview} alt="선택한 상품" className="capture-box__img" />
+                    <button
+                      type="button"
+                      className="capture-box__clear"
+                      onClick={() => {
+                        revokePreview(preview);
+                        setPreview(null);
+                        if (cameraRef.current) cameraRef.current.value = '';
+                        if (galleryRef.current) galleryRef.current.value = '';
+                      }}
+                      disabled={busy}
+                      aria-label="선택한 사진 제거"
+                    >
+                      ✕
+                    </button>
+                  </>
+                ) : (
+                  <div className="capture-box__empty">
+                    <span aria-hidden>📦</span>
+                    <p>상품 사진을 촬영하거나<br />갤러리에서 선택하세요</p>
+                  </div>
+                )}
+              </div>
+              <CaptureSideShortcuts
+                keyword={manualKeyword}
+                disabled={busy}
+                onHint={setShortcutHint}
+                onPreview={setCapturePreview}
+              />
+            </div>
+
+            <SearchHistoryPanel
+              items={searchHistory}
+              onPick={onPickHistoryEntry}
+              disabled={busy}
+            />
+
+            {shortcutHint && <p className="capture-shortcuts__hint">{shortcutHint}</p>}
+            {capturePreview && (
+              <NaverShoppingPreview
+                itemscout={capturePreview.itemscout}
+                listings={capturePreview.listings}
+                total={capturePreview.total}
+                compareUrl={capturePreview.compareUrl}
+                onClose={() => setCapturePreview(null)}
+              />
+            )}
 
             {error && <p className="alert" role="alert">{error}</p>}
           </section>

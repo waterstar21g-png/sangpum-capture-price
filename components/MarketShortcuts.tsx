@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import {
-  MARKET_SHORTCUTS,
+  filterMarketShortcuts,
   shortcutSearchText,
   type ShortcutQuery,
 } from '@/lib/market-shortcuts';
 import { clipItemscoutKeyword } from '@/lib/itemscout/resolve-keyword';
-import { copyProductNameForPaste, openItemscoutInKiwi } from '@/lib/itemscout/open-keyword';
+import { copyProductNameForPaste } from '@/lib/itemscout/open-keyword';
 import { openCoupangSearch } from '@/lib/coupang-app';
 import { openNaverShoppingSearch } from '@/lib/naver-shopping-app';
 import { NaverShoppingPreview, type ItemscoutPreview } from './NaverShoppingPreview';
@@ -35,9 +35,8 @@ export function MarketShortcuts({
   };
   const searchText = shortcutSearchText(q);
   const pasteText = clipItemscoutKeyword(searchText);
-  const [busy, setBusy] = useState(false);
-  const [hint, setHint] = useState<string | null>(null);
   const [copiedReady, setCopiedReady] = useState(false);
+  const [hint, setHint] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewErr, setPreviewErr] = useState<string | null>(null);
   const [preview, setPreview] = useState<{
@@ -66,7 +65,7 @@ export function MarketShortcuts({
 
   if (!searchText) return null;
 
-  async function openNaverShopping(e: React.MouseEvent) {
+  async function openNaverShoppingPreview(e: React.MouseEvent) {
     e.preventDefault();
     setPreviewLoading(true);
     setPreviewErr(null);
@@ -101,18 +100,6 @@ export function MarketShortcuts({
     } finally {
       setPreviewLoading(false);
     }
-  }
-
-  async function openItemscout(e: React.MouseEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setHint(null);
-
-    const result = await openItemscoutInKiwi(productName, keyword);
-    setCopiedReady(result.copied);
-    setHint(result.message);
-
-    setBusy(false);
   }
 
   async function openNaver(e: React.MouseEvent) {
@@ -151,39 +138,17 @@ export function MarketShortcuts({
         </button>
       </div>
       <div className="shortcuts" role="list">
-        {MARKET_SHORTCUTS.map(site => {
-          const isItemscout = site.id === 'itemscout';
+        {filterMarketShortcuts().map(site => {
           const isNaverShopping = site.id === 'naver-shopping';
           const isNaver = site.id === 'naver';
           const isCoupang = site.id === 'coupang';
-          const title = isItemscout
-            ? `아이템스카우트 키워드 분석: ${searchText}`
-            : isNaverShopping
-              ? `앱 내 가격비교·키워드: ${searchText}`
-              : isNaver
-                ? `네이버쇼핑 앱에서 검색: ${searchText}`
+          const title = isNaverShopping
+            ? `앱 내 가격비교·키워드: ${searchText}`
+            : isNaver
+              ? `네이버쇼핑 앱에서 검색: ${searchText}`
               : isCoupang
                 ? `쿠팡 앱에서 검색: ${searchText}`
                 : `${site.label}에서 검색: ${searchText}`;
-
-          if (isItemscout) {
-            return (
-              <button
-                key={site.id}
-                type="button"
-                role="listitem"
-                className="shortcut shortcut--btn"
-                title={title}
-                disabled={busy}
-                onClick={openItemscout}
-              >
-                <span className="shortcut__icon" style={{ background: site.color }} aria-hidden>
-                  {site.mark}
-                </span>
-                <span className="shortcut__label">{site.label}</span>
-              </button>
-            );
-          }
 
           if (isNaverShopping) {
             return (
@@ -194,7 +159,7 @@ export function MarketShortcuts({
                 className="shortcut shortcut--btn"
                 title={title}
                 disabled={previewLoading}
-                onClick={openNaverShopping}
+                onClick={openNaverShoppingPreview}
               >
                 <span className="shortcut__icon" style={{ background: site.color }} aria-hidden>
                   {site.mark}

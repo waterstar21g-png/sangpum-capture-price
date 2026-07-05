@@ -1,6 +1,6 @@
 {
   "name": "sangpum-capture-price",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "private": true,
   "description": "상품캡처 및 가격조회 — 사진으로 상품을 인식하고 아이템스카우트 시장 데이터를 조회합니다.",
   "scripts": {

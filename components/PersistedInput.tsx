@@ -43,8 +43,10 @@ export function PersistedHintInput(props: Props) {
 }
 
 interface KeywordProps extends Props {
-  searchHistory: SearchHistoryEntry[];
-  onPickEntry: (entry: SearchHistoryEntry) => void;
+  searchHistory?: SearchHistoryEntry[];
+  onPickEntry?: (entry: SearchHistoryEntry) => void;
+  /** true면 검색 이력은 패널 하단 SearchHistoryPanel 사용 */
+  hideHistory?: boolean;
 }
 
 /** 키워드 직접 입력 + 통합 최근 검색 이력 */
@@ -57,9 +59,10 @@ export function PersistedKeywordInput({
   disabled,
   searchHistory,
   onPickEntry,
+  hideHistory,
 }: KeywordProps) {
   const listId = `${id}-history-list`;
-  const datalistValues = searchHistory.map(e => e.productName || e.keyword);
+  const datalistValues = (searchHistory ?? []).map(e => e.productName || e.keyword);
 
   return (
     <div className="field field--persisted">
@@ -87,8 +90,55 @@ export function PersistedKeywordInput({
           ))}
         </datalist>
       )}
-      {searchHistory.length > 0 && (
+      {searchHistory && searchHistory.length > 0 && !hideHistory && onPickEntry && (
         <SearchHistoryList items={searchHistory} onPick={onPickEntry} />
+      )}
+    </div>
+  );
+}
+
+/** 패널 하단 검색 이력 — 숨기기/보이기 토글 + 스크롤 */
+export function SearchHistoryPanel({
+  items,
+  onPick,
+  disabled,
+}: {
+  items: SearchHistoryEntry[];
+  onPick: (entry: SearchHistoryEntry) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  if (!items.length) return null;
+
+  return (
+    <div className="search-history-panel">
+      <button
+        type="button"
+        className="search-history-panel__toggle"
+        onClick={() => setOpen(v => !v)}
+        aria-expanded={open}
+        disabled={disabled}
+      >
+        <span className="search-history-panel__label">검색 이력</span>
+        <span className="search-history-panel__arrow" aria-hidden>
+          {open ? '▲' : '▼'}
+        </span>
+      </button>
+      {open && (
+        <ul className="search-history-panel__list" role="list">
+          {items.map(entry => (
+            <li key={`${entry.searchedAt}-${entryDedupeKey(entry)}`}>
+              <button
+                type="button"
+                className="search-history-panel__item"
+                onClick={() => onPick(entry)}
+                disabled={disabled}
+              >
+                {entry.productName || entry.keyword}
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
