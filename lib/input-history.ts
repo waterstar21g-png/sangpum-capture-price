@@ -1,11 +1,18 @@
 const STORAGE_KEY = 'sangpum-capture:input-store';
-const MAX_HISTORY = 50;
+/** 검색 이력 UI — 한 화면에 보이는 행 수 */
+export const HISTORY_SCROLL_ROWS = 5;
 
-/** 최근 검색 1건 — 키워드 + 상품명(full name) + 힌트 */
+/** 최근 검색 1건 — 키워드 + 상품명(full name) + 힌트 + 썸네일 */
 export interface SearchHistoryEntry {
   keyword: string;
   productName: string;
   hint?: string;
+  /** 이미지 검색 시 썸네일 data URL (DB 미사용 시 로컬 폴백) */
+  imageThumb?: string;
+  /** 서버 DB 이미지 ID */
+  imageId?: string;
+  /** 서버 DB 이미지 URL */
+  imageUrl?: string;
   searchedAt: string;
 }
 
@@ -42,12 +49,19 @@ function sanitizeEntry(raw: unknown): SearchHistoryEntry | null {
   const productName = typeof o.productName === 'string' ? o.productName.trim() : '';
   if (!keyword && !productName) return null;
   const hint = typeof o.hint === 'string' && o.hint.trim() ? o.hint.trim() : undefined;
+  const imageThumb =
+    typeof o.imageThumb === 'string' && o.imageThumb.startsWith('data:image/') ? o.imageThumb : undefined;
+  const imageId = typeof o.imageId === 'string' && o.imageId.trim() ? o.imageId.trim() : undefined;
+  const imageUrl = typeof o.imageUrl === 'string' && o.imageUrl.trim() ? o.imageUrl.trim() : undefined;
   const searchedAt =
     typeof o.searchedAt === 'string' && o.searchedAt ? o.searchedAt : new Date().toISOString();
   return {
     keyword: keyword || productName,
     productName: productName || keyword,
     hint,
+    imageThumb: imageUrl ? undefined : imageThumb,
+    imageId,
+    imageUrl,
     searchedAt,
   };
 }
@@ -56,8 +70,7 @@ function migrateLegacy(parsed: Partial<InputStore>): SearchHistoryEntry[] {
   if (Array.isArray(parsed.searchHistory) && parsed.searchHistory.length) {
     return parsed.searchHistory
       .map(sanitizeEntry)
-      .filter((e): e is SearchHistoryEntry => e != null)
-      .slice(0, MAX_HISTORY);
+      .filter((e): e is SearchHistoryEntry => e != null);
   }
 
   const entries: SearchHistoryEntry[] = [];
@@ -84,7 +97,7 @@ function migrateLegacy(parsed: Partial<InputStore>): SearchHistoryEntry[] {
     add(h, h, h);
   }
 
-  return entries.slice(0, MAX_HISTORY);
+  return entries;
 }
 
 function sanitizeStringList(raw: unknown): string[] {
@@ -108,6 +121,14 @@ function readStore(): InputStore {
   }
 }
 
+function slimEntryForStorage(entry: SearchHistoryEntry): SearchHistoryEntry {
+  if (entry.imageUrl) {
+    const { imageThumb: _drop, ...rest } = entry;
+    return rest;
+  }
+  return entry;
+}
+
 function writeStore(store: InputStore): void {
   if (typeof window === 'undefined') return;
   try {
@@ -116,12 +137,17 @@ function writeStore(store: InputStore): void {
       JSON.stringify({
         hint: store.hint,
         keyword: store.keyword,
-        searchHistory: store.searchHistory.slice(0, MAX_HISTORY),
+        searchHistory: store.searchHistory.map(slimEntryForStorage),
       }),
     );
   } catch {
     /* ignore */
   }
+}
+
+export function saveSearchHistory(history: SearchHistoryEntry[]): void {
+  const store = readStore();
+  writeStore({ ...store, searchHistory: history });
 }
 
 export function loadInputStore(): InputStore {
@@ -138,6 +164,9 @@ export function pushSearchHistory(entry: {
   keyword: string;
   productName: string;
   hint?: string;
+  imageThumb?: string;
+  imageId?: string;
+  imageUrl?: string;
 }): SearchHistoryEntry[] {
   const keyword = entry.keyword.trim();
   const productName = entry.productName.trim();
@@ -147,6 +176,9 @@ export function pushSearchHistory(entry: {
     keyword: keyword || productName,
     productName: productName || keyword,
     hint: entry.hint?.trim() || undefined,
+    imageThumb: entry.imageUrl ? undefined : entry.imageThumb,
+    imageId: entry.imageId,
+    imageUrl: entry.imageUrl,
     searchedAt: new Date().toISOString(),
   });
   if (!newEntry) return readStore().searchHistory;
@@ -154,9 +186,36 @@ export function pushSearchHistory(entry: {
   const store = readStore();
   const key = entryDedupeKey(newEntry);
   const rest = store.searchHistory.filter(e => entryDedupeKey(e) !== key);
-  const next = [newEntry, ...rest].slice(0, MAX_HISTORY);
+  const next = [newEntry, ...rest];
   writeStore({ ...store, searchHistory: next });
   return next;
+}
+
+/** 로컬 이력 + 세션 DB 이미지 병합 */
+export function mergeSearchHistoryWithDb(
+  local: SearchHistoryEntry[],
+  fromDb: SearchHistoryEntry[],
+): SearchHistoryEntry[] {
+  const map = new Map<string, SearchHistoryEntry>();
+  for (const entry of local) {
+    map.set(entryDedupeKey(entry), entry);
+  }
+  for (const entry of fromDb) {
+    const key = entryDedupeKey(entry);
+    const prev = map.get(key);
+    if (prev) {
+      map.set(key, {
+        ...prev,
+        imageId: entry.imageId ?? prev.imageId,
+        imageUrl: entry.imageUrl ?? prev.imageUrl,
+        imageThumb: entry.imageUrl || prev.imageUrl ? undefined : prev.imageThumb,
+        searchedAt: entry.searchedAt > prev.searchedAt ? entry.searchedAt : prev.searchedAt,
+      });
+    } else {
+      map.set(key, entry);
+    }
+  }
+  return [...map.values()].sort((a, b) => b.searchedAt.localeCompare(a.searchedAt));
 }
 
 /** @deprecated — pushSearchHistory 사용 */
@@ -170,4 +229,3 @@ export function pushInputHistory(kind: 'hint' | 'keyword', value: string): void 
   }
 }
 
-export { MAX_HISTORY };

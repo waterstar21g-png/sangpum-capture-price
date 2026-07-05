@@ -6,8 +6,7 @@ import {
   shortcutSearchText,
   type ShortcutQuery,
 } from '@/lib/market-shortcuts';
-import { clipItemscoutKeyword } from '@/lib/itemscout/resolve-keyword';
-import { copyProductNameForPaste } from '@/lib/itemscout/open-keyword';
+import { copyProductNameForPaste, openItemscoutInKiwi } from '@/lib/itemscout/open-keyword';
 import { openCoupangSearch } from '@/lib/coupang-app';
 import { openNaverShoppingSearch } from '@/lib/naver-shopping-app';
 import { NaverShoppingPreview, type ItemscoutPreview } from './NaverShoppingPreview';
@@ -16,6 +15,10 @@ import type { NaverShopListing } from '@/lib/naver-shopping';
 interface Props {
   productName: string;
   keyword: string;
+  /** 복사용 원본 상품명 — 변형·잘림 없음 */
+  copyProductName?: string;
+  /** 모바일 절약 — 결과 진입 시 자동 복사 끔 */
+  skipAutoCopy?: boolean;
   /** 네이버 채널 경쟁강도 (키워드 분석 패널) */
   naverProductCount?: number;
   naverMonthlySearches?: number;
@@ -25,6 +28,8 @@ interface Props {
 export function MarketShortcuts({
   productName,
   keyword,
+  copyProductName,
+  skipAutoCopy = false,
   naverProductCount,
   naverMonthlySearches,
   naverIntensity,
@@ -34,9 +39,10 @@ export function MarketShortcuts({
     keyword: keyword.trim(),
   };
   const searchText = shortcutSearchText(q);
-  const pasteText = clipItemscoutKeyword(searchText);
-  const [copiedReady, setCopiedReady] = useState(false);
+  const pasteText = (copyProductName ?? productName).trim() || keyword.trim();
+  const [busy, setBusy] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
+  const [copiedReady, setCopiedReady] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewErr, setPreviewErr] = useState<string | null>(null);
   const [preview, setPreview] = useState<{
@@ -46,11 +52,12 @@ export function MarketShortcuts({
     compareUrl: string;
   } | null>(null);
 
-  // 결과 화면 진입 시 상품명을 클립보드에 미리 보관 (붙여넣기 직전 단계)
+  // 결과 화면 진입 시 상품명 클립보드 보관 (모바일 절약 시 생략)
   useEffect(() => {
+    if (skipAutoCopy) return;
     let cancelled = false;
     (async () => {
-      const { copied } = await copyProductNameForPaste(productName, keyword);
+      const { copied } = await copyProductNameForPaste(pasteText, keyword);
       if (!cancelled) {
         setCopiedReady(copied);
         if (copied) {
@@ -61,11 +68,11 @@ export function MarketShortcuts({
     return () => {
       cancelled = true;
     };
-  }, [productName, keyword, pasteText]);
+  }, [productName, keyword, pasteText, skipAutoCopy]);
 
   if (!searchText) return null;
 
-  async function openNaverShoppingPreview(e: React.MouseEvent) {
+  async function openNaverShopping(e: React.MouseEvent) {
     e.preventDefault();
     setPreviewLoading(true);
     setPreviewErr(null);
@@ -102,6 +109,18 @@ export function MarketShortcuts({
     }
   }
 
+  async function openItemscout(e: React.MouseEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setHint(null);
+
+    const result = await openItemscoutInKiwi(productName, keyword);
+    setCopiedReady(result.copied);
+    setHint(result.message);
+
+    setBusy(false);
+  }
+
   async function openNaver(e: React.MouseEvent) {
     e.preventDefault();
     const r = openNaverShoppingSearch(searchText);
@@ -115,7 +134,7 @@ export function MarketShortcuts({
   }
 
   async function copyOnly() {
-    const { text, copied } = await copyProductNameForPaste(productName, keyword);
+    const { text, copied } = await copyProductNameForPaste(pasteText, keyword);
     setCopiedReady(copied);
     setHint(
       copied
@@ -139,16 +158,38 @@ export function MarketShortcuts({
       </div>
       <div className="shortcuts" role="list">
         {filterMarketShortcuts().map(site => {
+          const isItemscout = site.id === 'itemscout';
           const isNaverShopping = site.id === 'naver-shopping';
           const isNaver = site.id === 'naver';
           const isCoupang = site.id === 'coupang';
-          const title = isNaverShopping
-            ? `앱 내 가격비교·키워드: ${searchText}`
-            : isNaver
-              ? `네이버쇼핑 앱에서 검색: ${searchText}`
+          const title = isItemscout
+            ? `아이템스카우트 키워드 분석: ${searchText}`
+            : isNaverShopping
+              ? `앱 내 가격비교·키워드: ${searchText}`
+              : isNaver
+                ? `네이버쇼핑 앱에서 검색: ${searchText}`
               : isCoupang
                 ? `쿠팡 앱에서 검색: ${searchText}`
                 : `${site.label}에서 검색: ${searchText}`;
+
+          if (isItemscout) {
+            return (
+              <button
+                key={site.id}
+                type="button"
+                role="listitem"
+                className="shortcut shortcut--btn"
+                title={title}
+                disabled={busy}
+                onClick={openItemscout}
+              >
+                <span className="shortcut__icon" style={{ background: site.color }} aria-hidden>
+                  {site.mark}
+                </span>
+                <span className="shortcut__label">{site.label}</span>
+              </button>
+            );
+          }
 
           if (isNaverShopping) {
             return (
@@ -159,7 +200,7 @@ export function MarketShortcuts({
                 className="shortcut shortcut--btn"
                 title={title}
                 disabled={previewLoading}
-                onClick={openNaverShoppingPreview}
+                onClick={openNaverShopping}
               >
                 <span className="shortcut__icon" style={{ background: site.color }} aria-hidden>
                   {site.mark}

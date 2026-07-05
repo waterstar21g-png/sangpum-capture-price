@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { filterMarketShortcuts, shortcutSearchText, type ShortcutQuery } from '@/lib/market-shortcuts';
 import { openCoupangSearch } from '@/lib/coupang-app';
 import { openNaverShoppingSearch } from '@/lib/naver-shopping-app';
+import { openItemscoutInKiwi } from '@/lib/itemscout/open-keyword';
 import type { NaverShopListing } from '@/lib/naver-shopping';
 import type { ItemscoutPreview } from './NaverShoppingPreview';
 
@@ -21,7 +22,7 @@ interface Props {
   onHint?: (message: string | null) => void;
 }
 
-/** 캡처 화면 — 이미지 우측 세로 바로가기 (6개) */
+/** 캡처 화면 — 이미지 우측 세로 바로가기 (7개) */
 export function CaptureSideShortcuts({ keyword, disabled, onPreview, onHint }: Props) {
   const q: ShortcutQuery = { productName: keyword.trim(), keyword: keyword.trim() };
   const searchText = shortcutSearchText(q);
@@ -69,7 +70,9 @@ export function CaptureSideShortcuts({ keyword, disabled, onPreview, onHint }: P
     if (site.id === 'coupang') onHint?.(openCoupangSearch(searchText).message);
     else if (site.id === 'naver') onHint?.(openNaverShoppingSearch(searchText).message);
     else if (site.id === 'naver-shopping') void openNaverShopping();
-    else window.open(site.buildUrl(q), '_blank', 'noopener,noreferrer');
+    else if (site.id === 'itemscout') {
+      void openItemscoutInKiwi(searchText, searchText).then(r => onHint?.(r.message));
+    } else window.open(site.buildUrl(q), '_blank', 'noopener,noreferrer');
   }
 
   return (

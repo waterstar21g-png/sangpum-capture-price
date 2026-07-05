@@ -1,9 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ProductScoutResult } from '@/lib/itemscout/types';
 import type { SearchHistoryEntry } from '@/lib/input-history';
-import { compressImageToDataUrl } from '@/lib/compress-image';
+import { compressImageToDataUrl, compressImageToThumbnail } from '@/lib/compress-image';
 import { ViewTrendChart } from './ViewTrendChart';
 import { MarketShortcuts } from './MarketShortcuts';
 import { OverviewChart } from './OverviewChart';
@@ -11,12 +11,15 @@ import { RatioBars } from './RatioBars';
 import { PriceComparePanel } from './PriceComparePanel';
 import { openItemscoutInKiwi } from '@/lib/itemscout/open-keyword';
 import { isAndroidDevice } from '@/lib/kiwi-browser';
+import { saveCaptureToGallery } from '@/lib/save-capture-gallery';
+import { entryImageSrc, persistSearchImageToDb } from '@/lib/search-image-client';
+import { PersistedKeywordInput, usePersistedInputs } from './PersistedInput';
+import { loadMobileSaveMode, saveMobileSaveMode } from '@/lib/mobile-save-mode';
+import { SearchHistoryPanel } from './SearchHistoryPanel';
 import { CaptureSideShortcuts, type CaptureNaverPreview } from './CaptureSideShortcuts';
 import { NaverShoppingPreview } from './NaverShoppingPreview';
-import { PersistedKeywordInput, SearchHistoryPanel, usePersistedInputs } from './PersistedInput';
 
-type Step = 'capture' | 'analyzing' | 'result';
-type ActiveField = 'image' | 'keyword';
+type ActiveField = 'image' | 'hint' | 'keyword';
 
 interface AnalyzeResponse {
   ok: boolean;
@@ -28,99 +31,199 @@ interface AnalyzeResponse {
 export function ProductCaptureApp() {
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
-  const [step, setStep] = useState<Step>('capture');
   const [preview, setPreview] = useState<string | null>(null);
+  const [searchImageUrl, setSearchImageUrl] = useState<string | null>(null);
+  const [imageThumb, setImageThumb] = useState<string | null>(null);
   const {
+    hint,
+    setHint,
     manualKeyword,
     setManualKeyword,
     searchHistory,
     recordSuccessfulAnalysis,
   } = usePersistedInputs();
   const [result, setResult] = useState<ProductScoutResult | null>(null);
+  const [originalProductName, setOriginalProductName] = useState<string | null>(null);
   const [visionInfo, setVisionInfo] = useState<AnalyzeResponse['vision'] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [kiwiHint, setKiwiHint] = useState<string | null>(null);
+  const [galleryHint, setGalleryHint] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [shortcutHint, setShortcutHint] = useState<string | null>(null);
   const [capturePreview, setCapturePreview] = useState<CaptureNaverPreview | null>(null);
   const textTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipKeywordEffectsRef = useRef(false);
+  const [mobileSave, setMobileSave] = useState(false);
 
-  const revokePreview = useCallback((url: string | null) => {
-    if (url?.startsWith('blob:')) URL.revokeObjectURL(url);
+  useEffect(() => {
+    setMobileSave(loadMobileSaveMode());
   }, []);
 
-  useEffect(() => () => revokePreview(preview), [preview, revokePreview]);
   useEffect(() => () => { if (textTimerRef.current) clearTimeout(textTimerRef.current); }, []);
 
   /** 액션 항목만 남기고 나머지 입력·사진 전부 제거 */
   function clearExcept(active: ActiveField) {
     if (active !== 'image') {
-      revokePreview(preview);
       setPreview(null);
+      setSearchImageUrl(null);
+      setImageThumb(null);
       if (cameraRef.current) cameraRef.current.value = '';
       if (galleryRef.current) galleryRef.current.value = '';
     }
-    if (active !== 'keyword') setManualKeyword('');
+    if (active !== 'hint') setHint('');
+    if (active !== 'keyword') applyKeywordValue('');
   }
 
-  async function onPickFile(file: File | undefined) {
+  function applyKeywordValue(value: string) {
+    skipKeywordEffectsRef.current = true;
+    setManualKeyword(value);
+  }
+
+  async function onPickFile(file: File | undefined, fromCamera: boolean) {
     if (!file || !file.type.startsWith('image/')) {
       setError('이미지 파일만 선택할 수 있습니다.');
       return;
     }
     clearExcept('image');
-    revokePreview(preview);
-    setPreview(URL.createObjectURL(file));
     setError(null);
+    setGalleryHint(null);
     setResult(null);
+    setOriginalProductName(null);
     setVisionInfo(null);
-    await searchByImage(file);
+    try {
+      if (fromCamera) {
+        const saved = await saveCaptureToGallery(file);
+        if (saved.message) setGalleryHint(saved.message);
+      }
+      const [dataUrl, thumb] = await Promise.all([
+        compressImageToDataUrl(file),
+        compressImageToThumbnail(file),
+      ]);
+      setPreview(dataUrl);
+      setSearchImageUrl(dataUrl);
+      setImageThumb(thumb);
+      await searchByImage(dataUrl, thumb);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '이미지 처리에 실패했습니다.');
+    }
   }
 
   function onKeywordChange(value: string) {
+    if (skipKeywordEffectsRef.current) {
+      skipKeywordEffectsRef.current = false;
+      setManualKeyword(value);
+      return;
+    }
     clearExcept('keyword');
     setManualKeyword(value);
     queueTextSearch(value);
   }
 
-  function onPickHistoryEntry(entry: SearchHistoryEntry) {
-    const text = (entry.productName || entry.keyword).trim();
+  function commitKeywordSearch(text: string) {
+    if (textTimerRef.current) clearTimeout(textTimerRef.current);
+    const trimmed = text.trim();
+    if (!trimmed || busy) return;
+    const entry = searchHistory.find(e => (e.productName || e.keyword).trim() === trimmed);
+    if (entry) {
+      onPickHistoryEntry(entry);
+      return;
+    }
     clearExcept('keyword');
-    setManualKeyword(text);
-    if (text) void searchByText(text);
+    setManualKeyword(trimmed);
+    void searchByText(trimmed);
+  }
+
+  function onPickHistoryEntry(entry: SearchHistoryEntry) {
+    if (textTimerRef.current) clearTimeout(textTimerRef.current);
+    skipKeywordEffectsRef.current = true;
+    const text = (entry.productName || entry.keyword).trim();
+    const imgSrc = entryImageSrc(entry);
+    if (imgSrc) {
+      if (cameraRef.current) cameraRef.current.value = '';
+      if (galleryRef.current) galleryRef.current.value = '';
+      setHint(entry.hint ?? '');
+      applyKeywordValue(text);
+      setPreview(imgSrc);
+      setSearchImageUrl(imgSrc);
+      setImageThumb(imgSrc);
+      if (text) void searchByText(text, imgSrc, imgSrc, entry.imageId, entry.imageUrl, text);
+      return;
+    }
+    clearExcept('keyword');
+    if (entry.hint) setHint(entry.hint);
+    applyKeywordValue(text);
+    if (text) void searchByText(text, undefined, undefined, undefined, undefined, text);
   }
 
   function queueTextSearch(text: string) {
+    if (mobileSave) return;
     if (textTimerRef.current) clearTimeout(textTimerRef.current);
     const trimmed = text.trim();
     if (!trimmed) return;
     textTimerRef.current = setTimeout(() => void searchByText(trimmed), 450);
   }
 
-  async function searchByImage(file: File | Blob) {
+  function toggleMobileSave() {
+    const next = !mobileSave;
+    setMobileSave(next);
+    saveMobileSaveMode(next);
+    if (textTimerRef.current) clearTimeout(textTimerRef.current);
+  }
+
+  async function searchByImage(dataUrl: string, thumb: string) {
     setError(null);
+    setResult(null);
+    setOriginalProductName(null);
+    setVisionInfo(null);
     setBusy(true);
-    setStep('analyzing');
     try {
-      const dataUrl = await compressImageToDataUrl(file);
+      const body: Record<string, unknown> = {
+        imageDataUrl: dataUrl,
+        searchPriority: 'productName',
+      };
+      if (mobileSave) {
+        body.economyVision = true;
+        if (hint.trim()) {
+          body.hint = hint.trim();
+          body.skipVision = true;
+        }
+      }
       const res = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageDataUrl: dataUrl, searchPriority: 'productName' }),
+        body: JSON.stringify(body),
       });
-      await finishSearch(res);
+      await finishSearch(res, { imageThumb: thumb, displayImageUrl: dataUrl });
     } catch (e) {
       setError(e instanceof Error ? e.message : '분석에 실패했습니다.');
-      setStep('capture');
     } finally {
       setBusy(false);
     }
   }
 
-  async function searchByText(text: string) {
+  async function searchByText(
+    text: string,
+    keepImageThumb?: string,
+    displayImageUrl?: string,
+    keepImageId?: string,
+    keepImageUrl?: string,
+    originalName?: string,
+  ) {
+    const trimmed = text.trim();
+    const pendingOriginal = originalName?.trim() || trimmed;
     setError(null);
+    setResult(null);
+    setVisionInfo(null);
+    if (keepImageThumb && displayImageUrl) {
+      setPreview(displayImageUrl);
+      setSearchImageUrl(displayImageUrl);
+      setImageThumb(keepImageThumb);
+    } else {
+      setSearchImageUrl(null);
+      setImageThumb(null);
+      setPreview(null);
+    }
     setBusy(true);
-    setStep('analyzing');
     try {
       const res = await fetch('/api/analyze', {
         method: 'POST',
@@ -132,39 +235,93 @@ export function ProductCaptureApp() {
           searchPriority: 'productName',
         }),
       });
-      await finishSearch(res);
+      await finishSearch(
+        res,
+        keepImageThumb || keepImageUrl
+          ? {
+              imageThumb: keepImageThumb,
+              displayImageUrl,
+              imageId: keepImageId,
+              imageUrl: keepImageUrl,
+              originalProductName: pendingOriginal,
+            }
+          : { originalProductName: pendingOriginal },
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : '분석에 실패했습니다.');
-      setStep('capture');
     } finally {
       setBusy(false);
     }
   }
 
-  async function finishSearch(res: Response) {
+  async function finishSearch(
+    res: Response,
+    options?: {
+      imageThumb?: string;
+      displayImageUrl?: string;
+      imageId?: string;
+      imageUrl?: string;
+      hint?: string;
+      originalProductName?: string;
+    },
+  ) {
     const data = await parseAnalyzeResponse(res);
     if (!res.ok || !data.ok || !data.scout) {
       throw new Error(data.message ?? '분석에 실패했습니다.');
     }
+    const thumb = options?.imageThumb;
+    let imageId = options?.imageId;
+    let imageUrl = options?.imageUrl;
+
+    if (thumb && !imageUrl) {
+      const stored = await persistSearchImageToDb({
+        imageDataUrl: thumb,
+        productName: data.scout.productName,
+        keyword: data.scout.productName,
+        hint: options?.hint,
+      });
+      if (stored) {
+        imageId = stored.imageId;
+        imageUrl = stored.imageUrl;
+      }
+    }
+
+    const displayUrl = imageUrl || options?.displayImageUrl || thumb;
+    if (displayUrl) {
+      setPreview(displayUrl);
+      setSearchImageUrl(displayUrl);
+    }
+    if (thumb) setImageThumb(thumb);
+    const original =
+      options?.originalProductName?.trim() ||
+      data.vision?.productName?.trim() ||
+      data.scout.productName;
+    setOriginalProductName(original);
     setResult(data.scout);
     setVisionInfo(data.vision ?? null);
-    setManualKeyword(data.scout.productName);
+    applyKeywordValue(data.scout.productName);
     recordSuccessfulAnalysis({
-      keyword: data.scout.productName,
-      productName: data.scout.productName,
+      keyword: data.scout.keyword || original,
+      productName: original,
+      hint: options?.hint,
+      imageThumb: imageUrl ? undefined : thumb,
+      imageId,
+      imageUrl,
     });
-    setStep('result');
   }
 
   function reset() {
-    revokePreview(preview);
     setPreview(null);
+    setSearchImageUrl(null);
+    setImageThumb(null);
+    setHint('');
     setManualKeyword('');
     setResult(null);
+    setOriginalProductName(null);
     setVisionInfo(null);
     setError(null);
     setKiwiHint(null);
-    setStep('capture');
+    setGalleryHint(null);
     if (cameraRef.current) cameraRef.current.value = '';
     if (galleryRef.current) galleryRef.current.value = '';
   }
@@ -176,103 +333,119 @@ export function ProductCaptureApp() {
           <span className="app-header__logo" aria-hidden>📷</span>
           <div>
             <h1 className="app-header__title">상품캡처 및 가격조회</h1>
-            <p className="app-header__sub">선택·입력 즉시 검색</p>
+            <p className="app-header__sub">입력창은 항상 유지 · 조작 시 바로 새 검색</p>
           </div>
         </div>
       </header>
 
       <main className="app-main">
-        {step === 'capture' && (
-          <section className="panel">
-            <h2 className="panel__title">상품캡처</h2>
+        <section className="panel">
+          <h2 className="panel__title">상품캡처</h2>
 
-            <div className="btn-row capture-actions">
-              <button type="button" className="btn btn--primary" onClick={() => cameraRef.current?.click()} disabled={busy}>
-                카메라촬영
-              </button>
-              <button type="button" className="btn" onClick={() => galleryRef.current?.click()} disabled={busy}>
-                갤러리선택
-              </button>
-            </div>
-
-            <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="sr-only" aria-label="카메라 촬영" onChange={e => onPickFile(e.target.files?.[0])} />
-            <input ref={galleryRef} type="file" accept="image/*" className="sr-only" aria-label="갤러리 선택" onChange={e => onPickFile(e.target.files?.[0])} />
-
-            <PersistedKeywordInput
-              id="manual-keyword"
-              label="키워드 직접입력"
-              value={manualKeyword}
-              onChange={onKeywordChange}
-              placeholder=""
-              disabled={busy}
-              hideHistory
-            />
-
-            <div className="capture-row">
-              <div className="capture-box">
-                {preview ? (
-                  <>
-                    <img src={preview} alt="선택한 상품" className="capture-box__img" />
-                    <button
-                      type="button"
-                      className="capture-box__clear"
-                      onClick={() => {
-                        revokePreview(preview);
-                        setPreview(null);
-                        if (cameraRef.current) cameraRef.current.value = '';
-                        if (galleryRef.current) galleryRef.current.value = '';
-                      }}
-                      disabled={busy}
-                      aria-label="선택한 사진 제거"
-                    >
-                      ✕
-                    </button>
-                  </>
-                ) : (
-                  <div className="capture-box__empty">
-                    <span aria-hidden>📦</span>
-                    <p>상품 사진을 촬영하거나<br />갤러리에서 선택하세요</p>
-                  </div>
-                )}
-              </div>
-              <CaptureSideShortcuts
-                keyword={manualKeyword}
-                disabled={busy}
-                onHint={setShortcutHint}
-                onPreview={setCapturePreview}
-              />
-            </div>
-
-            <SearchHistoryPanel
-              items={searchHistory}
-              onPick={onPickHistoryEntry}
+          <label className="mobile-save">
+            <input
+              type="checkbox"
+              checked={mobileSave}
+              onChange={toggleMobileSave}
               disabled={busy}
             />
+            <span className="mobile-save__label">
+              <strong>모바일 절약</strong> — 입력 중 자동검색 끔 · AI 토큰 최소화
+              {mobileSave && <em className="mobile-save__hint"> (Enter·이력·촬영 시에만 검색)</em>}
+            </span>
+          </label>
 
-            {shortcutHint && <p className="capture-shortcuts__hint">{shortcutHint}</p>}
-            {capturePreview && (
-              <NaverShoppingPreview
-                itemscout={capturePreview.itemscout}
-                listings={capturePreview.listings}
-                total={capturePreview.total}
-                compareUrl={capturePreview.compareUrl}
-                onClose={() => setCapturePreview(null)}
-              />
-            )}
+          <div className="btn-row capture-actions">
+            <button type="button" className="btn btn--primary" onClick={() => cameraRef.current?.click()} disabled={busy}>
+              카메라촬영
+            </button>
+            <button type="button" className="btn" onClick={() => galleryRef.current?.click()} disabled={busy}>
+              갤러리선택
+            </button>
+          </div>
 
-            {error && <p className="alert" role="alert">{error}</p>}
-          </section>
-        )}
+          <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="sr-only" aria-label="카메라 촬영" onChange={e => { void onPickFile(e.target.files?.[0], true); e.target.value = ''; }} />
+          <input ref={galleryRef} type="file" accept="image/*" className="sr-only" aria-label="갤러리 선택" onChange={e => { void onPickFile(e.target.files?.[0], false); e.target.value = ''; }} />
 
-        {step === 'analyzing' && (
-          <section className="panel panel--center">
+          <PersistedKeywordInput
+            id="manual-keyword"
+            label="키워드 직접입력"
+            value={manualKeyword}
+            onChange={onKeywordChange}
+            placeholder=""
+            disabled={busy}
+            searchHistory={searchHistory}
+            onPickEntry={onPickHistoryEntry}
+            onCommitSearch={commitKeywordSearch}
+            skipInputAutoSearch={mobileSave}
+          />
+
+          <div className="capture-row">
+            <div className="capture-box">
+              {(preview || searchImageUrl) ? (
+                <>
+                  <img src={preview || searchImageUrl || ''} alt="선택한 상품" className="capture-box__img" />
+                  <button
+                    type="button"
+                    className="capture-box__clear"
+                    onClick={() => {
+                      setPreview(null);
+                      setSearchImageUrl(null);
+                      setImageThumb(null);
+                      if (cameraRef.current) cameraRef.current.value = '';
+                      if (galleryRef.current) galleryRef.current.value = '';
+                    }}
+                    disabled={busy}
+                    aria-label="선택한 사진 제거"
+                  >
+                    ✕
+                  </button>
+                </>
+              ) : (
+                <div className="capture-box__empty">
+                  <span aria-hidden>📦</span>
+                  <p>상품 사진을 촬영하거나<br />갤러리에서 선택하세요</p>
+                </div>
+              )}
+            </div>
+            <CaptureSideShortcuts
+              keyword={manualKeyword}
+              disabled={busy}
+              onHint={setShortcutHint}
+              onPreview={setCapturePreview}
+            />
+          </div>
+
+          <SearchHistoryPanel
+            items={searchHistory}
+            onPick={onPickHistoryEntry}
+            disabled={busy}
+          />
+
+          {shortcutHint && <p className="capture-shortcuts__hint">{shortcutHint}</p>}
+          {capturePreview && (
+            <NaverShoppingPreview
+              itemscout={capturePreview.itemscout}
+              listings={capturePreview.listings}
+              total={capturePreview.total}
+              compareUrl={capturePreview.compareUrl}
+              onClose={() => setCapturePreview(null)}
+            />
+          )}
+
+          {error && <p className="alert" role="alert">{error}</p>}
+          {galleryHint && <p className="notice" role="status">{galleryHint}</p>}
+        </section>
+
+        {busy && (
+          <section className="panel panel--center panel--loading" aria-live="polite">
             <div className="spinner" aria-hidden />
             <p className="loading-title">분석 중…</p>
-            <p className="loading-sub">검색 조회 중</p>
+            <p className="loading-sub">새 검색 조회 중</p>
           </section>
         )}
 
-        {step === 'result' && result && (
+        {result && !busy && (
           <section className="result">
             <div className="result__meta">
               <span className={`badge badge--${result.source}`}>
@@ -292,6 +465,8 @@ export function ProductCaptureApp() {
             <MarketShortcuts
               productName={result.productName}
               keyword={result.keyword}
+              copyProductName={originalProductName ?? result.productName}
+              skipAutoCopy={mobileSave}
               naverProductCount={
                 result.itemscoutMetricsAvailable
                   ? result.competitionByChannel?.find(c => c.channel === 'naver')?.productCount

@@ -31,7 +31,7 @@ export function itemscoutKeywordAnalysisUrl(productName: string, keyword?: strin
   return `/api/itemscout-redirect?q=${encodeURIComponent(text)}`;
 }
 
-/** 캡처·결과 화면 바로가기 — 6개만 (기타 삭제) */
+/** 캡처·결과 화면 바로가기 — 7개 (1688·타obao 제외, 아이템스카우트 보존) */
 export const CAPTURE_SHORTCUT_IDS = [
   'coupang',
   'naver',
@@ -39,6 +39,7 @@ export const CAPTURE_SHORTCUT_IDS = [
   'domeggook',
   'domeme',
   'alibaba',
+  'itemscout',
 ] as const;
 
 export type CaptureShortcutId = (typeof CAPTURE_SHORTCUT_IDS)[number];
@@ -99,5 +100,12 @@ export const MARKET_SHORTCUTS: MarketShortcut[] = [
     color: '#ff6a00',
     buildUrl: q =>
       `https://www.alibaba.com/trade/search?fsb=y&IndexArea=product_en&SearchText=${encodeURIComponent(shortcutSearchText(q))}`,
+  },
+  {
+    id: 'itemscout',
+    label: '스카우트',
+    mark: '스',
+    color: '#7c3aed',
+    buildUrl: q => itemscoutKeywordAnalysisUrl(q.productName, q.keyword),
   },
 ];

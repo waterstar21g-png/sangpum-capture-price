@@ -21,6 +21,7 @@ export async function POST(req: NextRequest) {
     productName?: string;
     hint?: string;
     skipVision?: boolean;
+    economyVision?: boolean;
     searchPriority?: 'productName' | 'keyword';
   };
   try {
@@ -79,7 +80,11 @@ export async function POST(req: NextRequest) {
         );
       }
       try {
-        const vision = await analyzeProductImage(apiKey, { imageDataUrl, hint: body.hint });
+        const vision = await analyzeProductImage(apiKey, {
+          imageDataUrl,
+          hint: body.hint,
+          economy: body.economyVision === true,
+        });
         keyword = vision.keyword;
         productName = vision.productName;
         category = vision.category;

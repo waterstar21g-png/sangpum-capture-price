@@ -5,9 +5,11 @@ import {
   loadInputStore,
   saveInputDraft,
   pushSearchHistory,
-  MAX_HISTORY,
+  mergeSearchHistoryWithDb,
+  saveSearchHistory,
   type SearchHistoryEntry,
 } from '@/lib/input-history';
+import { fetchSessionSearchImages } from '@/lib/search-image-client';
 
 interface Props {
   id: string;
@@ -19,7 +21,7 @@ interface Props {
 }
 
 /** 상품 힌트 입력 (draft만 저장, 이력은 통합 목록) */
-export function PersistedHintInput(props: Props) {
+export function PersistedHintInput(props: Props & { onCommitSearch?: (text: string) => void }) {
   return (
     <div className="field field--persisted">
       <label className="field__label" htmlFor={props.id}>
@@ -29,9 +31,15 @@ export function PersistedHintInput(props: Props) {
         id={props.id}
         type="text"
         inputMode="text"
-        enterKeyHint="next"
+        enterKeyHint="search"
         value={props.value}
         onChange={e => props.onChange(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter' && props.onCommitSearch) {
+            e.preventDefault();
+            props.onCommitSearch(props.value);
+          }
+        }}
         placeholder={props.placeholder}
         disabled={props.disabled}
         autoComplete="off"
@@ -43,10 +51,11 @@ export function PersistedHintInput(props: Props) {
 }
 
 interface KeywordProps extends Props {
+  onCommitSearch: (text: string) => void;
   searchHistory?: SearchHistoryEntry[];
   onPickEntry?: (entry: SearchHistoryEntry) => void;
-  /** true면 검색 이력은 패널 하단 SearchHistoryPanel 사용 */
-  hideHistory?: boolean;
+  /** 모바일 절약 — datalist 선택 시 자동검색 끔 */
+  skipInputAutoSearch?: boolean;
 }
 
 /** 키워드 직접 입력 + 통합 최근 검색 이력 */
@@ -57,12 +66,19 @@ export function PersistedKeywordInput({
   onChange,
   placeholder,
   disabled,
-  searchHistory,
+  searchHistory = [],
   onPickEntry,
-  hideHistory,
+  onCommitSearch,
+  skipInputAutoSearch = false,
 }: KeywordProps) {
   const listId = `${id}-history-list`;
-  const datalistValues = (searchHistory ?? []).map(e => e.productName || e.keyword);
+  const datalistValues = searchHistory.map(e => e.productName || e.keyword);
+
+  function findHistoryMatch(text: string): SearchHistoryEntry | undefined {
+    const trimmed = text.trim();
+    if (!trimmed) return undefined;
+    return searchHistory.find(e => (e.productName || e.keyword).trim() === trimmed);
+  }
 
   return (
     <div className="field field--persisted">
@@ -76,6 +92,17 @@ export function PersistedKeywordInput({
         enterKeyHint="search"
         value={value}
         onChange={e => onChange(e.target.value)}
+        onInput={e => {
+          if (skipInputAutoSearch) return;
+          const hit = findHistoryMatch(e.currentTarget.value);
+          if (hit && onPickEntry) onPickEntry(hit);
+        }}
+        onKeyDown={e => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            onCommitSearch(value);
+          }
+        }}
         placeholder={placeholder}
         disabled={disabled}
         list={datalistValues.length ? listId : undefined}
@@ -90,104 +117,8 @@ export function PersistedKeywordInput({
           ))}
         </datalist>
       )}
-      {searchHistory && searchHistory.length > 0 && !hideHistory && onPickEntry && (
-        <SearchHistoryList items={searchHistory} onPick={onPickEntry} />
-      )}
     </div>
   );
-}
-
-/** 패널 하단 검색 이력 — 숨기기/보이기 토글 + 스크롤 */
-export function SearchHistoryPanel({
-  items,
-  onPick,
-  disabled,
-}: {
-  items: SearchHistoryEntry[];
-  onPick: (entry: SearchHistoryEntry) => void;
-  disabled?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  if (!items.length) return null;
-
-  return (
-    <div className="search-history-panel">
-      <button
-        type="button"
-        className="search-history-panel__toggle"
-        onClick={() => setOpen(v => !v)}
-        aria-expanded={open}
-        disabled={disabled}
-      >
-        <span className="search-history-panel__label">검색 이력</span>
-        <span className="search-history-panel__arrow" aria-hidden>
-          {open ? '▲' : '▼'}
-        </span>
-      </button>
-      {open && (
-        <ul className="search-history-panel__list" role="list">
-          {items.map(entry => (
-            <li key={`${entry.searchedAt}-${entryDedupeKey(entry)}`}>
-              <button
-                type="button"
-                className="search-history-panel__item"
-                onClick={() => onPick(entry)}
-                disabled={disabled}
-              >
-                {entry.productName || entry.keyword}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function SearchHistoryList({
-  items,
-  onPick,
-}: {
-  items: SearchHistoryEntry[];
-  onPick: (entry: SearchHistoryEntry) => void;
-}) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <div className="input-history">
-      <button
-        type="button"
-        className="input-history__toggle"
-        onClick={() => setOpen(v => !v)}
-        aria-expanded={open}
-      >
-        최근 검색 {items.length}건
-        {items.length >= MAX_HISTORY ? ` (최대 ${MAX_HISTORY})` : ''}
-        <span aria-hidden>{open ? ' ▲' : ' ▼'}</span>
-      </button>
-      {open && (
-        <ul className="input-history__list input-history__list--rich" role="list">
-          {items.map(entry => (
-            <li key={`${entry.searchedAt}-${entryDedupeKey(entry)}`}>
-              <button type="button" className="input-history__chip-rich" onClick={() => onPick(entry)}>
-                <span className="input-history__name">{entry.productName}</span>
-                {entry.keyword !== entry.productName && (
-                  <span className="input-history__kw">키워드: {entry.keyword}</span>
-                )}
-                {entry.hint && entry.hint !== entry.productName && (
-                  <span className="input-history__hint">힌트: {entry.hint}</span>
-                )}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function entryDedupeKey(entry: SearchHistoryEntry): string {
-  return (entry.productName || entry.keyword).trim().toLowerCase();
 }
 
 export function usePersistedInputs() {
@@ -202,6 +133,13 @@ export function usePersistedInputs() {
     setManualKeyword(store.keyword);
     setSearchHistory(store.searchHistory);
     setHydrated(true);
+
+    void fetchSessionSearchImages().then(fromDb => {
+      if (!fromDb.length) return;
+      const merged = mergeSearchHistoryWithDb(store.searchHistory, fromDb);
+      setSearchHistory(merged);
+      saveSearchHistory(merged);
+    });
   }, []);
 
   useEffect(() => {
@@ -218,6 +156,9 @@ export function usePersistedInputs() {
     keyword: string;
     productName: string;
     hint?: string;
+    imageThumb?: string;
+    imageId?: string;
+    imageUrl?: string;
   }) {
     const next = pushSearchHistory(params);
     setSearchHistory(next);
