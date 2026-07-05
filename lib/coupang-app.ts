@@ -58,11 +58,16 @@ export function openCoupangSearch(query: string): OpenCoupangResult {
   const isIos =
     typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent);
   if (isIos) {
-    window.location.href = coupangAppSearchUrl(text);
+    const appLink = document.createElement('a');
+    appLink.href = coupangAppSearchUrl(text);
+    appLink.style.display = 'none';
+    document.body.appendChild(appLink);
+    appLink.click();
+    document.body.removeChild(appLink);
     window.setTimeout(() => {
       window.open(webUrl, '_blank', 'noopener,noreferrer');
-    }, 800);
-    return { mode: 'app', message: '쿠팡 앱으로 연결합니다.' };
+    }, 600);
+    return { mode: 'app', message: '쿠팡 앱으로 연결합니다. 앱이 없으면 새 탭에서 웹 검색이 열립니다.' };
   }
 
   window.open(webUrl, '_blank', 'noopener,noreferrer');

@@ -5,9 +5,11 @@ import {
   loadInputStore,
   saveInputDraft,
   pushSearchHistory,
+  mergeSearchHistory,
   MAX_HISTORY,
   type SearchHistoryEntry,
 } from '@/lib/input-history';
+import { fetchServerKeywords } from '@/lib/server-storage-client';
 
 interface Props {
   id: string;
@@ -152,6 +154,13 @@ export function usePersistedInputs() {
     setManualKeyword(store.keyword);
     setSearchHistory(store.searchHistory);
     setHydrated(true);
+
+    void (async () => {
+      const server = await fetchServerKeywords();
+      if (server && server.length > 0) {
+        setSearchHistory(prev => mergeSearchHistory(server, prev));
+      }
+    })();
   }, []);
 
   useEffect(() => {
