@@ -82,8 +82,8 @@ export function openNaverShoppingSearch(query: string): OpenNaverShoppingResult 
   const isIos =
     typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent);
   if (isIos) {
-    window.location.href = webUrl;
-    return { mode: 'app', message: '네이버쇼핑으로 연결합니다.' };
+    openHttps(webUrl);
+    return { mode: 'web', message: '네이버쇼핑을 새 탭에서 열었습니다.' };
   }
 
   openHttps(webUrl);

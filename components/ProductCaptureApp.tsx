@@ -5,6 +5,12 @@ import type { ProductScoutResult } from '@/lib/itemscout/types';
 import type { SearchHistoryEntry } from '@/lib/input-history';
 import { compressImageToDataUrl } from '@/lib/compress-image';
 import { findProductImage, saveProductImage } from '@/lib/product-image-store';
+import {
+  buildAppSessionSnapshot,
+  clearAppSession,
+  loadAppSession,
+  saveAppSession,
+} from '@/lib/app-session';
 import { ViewTrendChart } from './ViewTrendChart';
 import { MarketShortcuts } from './MarketShortcuts';
 import { OverviewChart } from './OverviewChart';
@@ -38,6 +44,7 @@ export function ProductCaptureApp() {
     setManualKeyword,
     searchHistory,
     recordSuccessfulAnalysis,
+    hydrated,
   } = usePersistedInputs();
   const [result, setResult] = useState<ProductScoutResult | null>(null);
   const [visionInfo, setVisionInfo] = useState<AnalyzeResponse['vision'] | null>(null);
@@ -45,6 +52,7 @@ export function ProductCaptureApp() {
   const [kiwiHint, setKiwiHint] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const textTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sessionRestoredRef = useRef(false);
 
   const revokePreview = useCallback((url: string | null) => {
     if (url?.startsWith('blob:')) URL.revokeObjectURL(url);
@@ -52,6 +60,56 @@ export function ProductCaptureApp() {
 
   useEffect(() => () => revokePreview(preview), [preview, revokePreview]);
   useEffect(() => () => { if (textTimerRef.current) clearTimeout(textTimerRef.current); }, []);
+
+  const persistCurrentSession = useCallback(async () => {
+    if (step !== 'result' || !result) return;
+    await saveAppSession(
+      buildAppSessionSnapshot({
+        result,
+        visionInfo,
+        manualKeyword,
+        hint,
+      }),
+    );
+  }, [step, result, visionInfo, manualKeyword, hint]);
+
+  const restoreSessionIfNeeded = useCallback(async () => {
+    if (!hydrated) return;
+    if (step === 'result' && result) return;
+
+    const snap = await loadAppSession();
+    if (!snap) return;
+
+    setResult(snap.result);
+    setVisionInfo(snap.visionInfo ?? null);
+    setManualKeyword(snap.manualKeyword);
+    setHint(snap.hint);
+    const imageUrl = await findProductImage(snap.result.productName);
+    setResultImageUrl(imageUrl);
+    setStep('result');
+  }, [hydrated, step, result, setHint, setManualKeyword]);
+
+  useEffect(() => {
+    if (!hydrated || sessionRestoredRef.current) return;
+    sessionRestoredRef.current = true;
+    void restoreSessionIfNeeded();
+  }, [hydrated, restoreSessionIfNeeded]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void restoreSessionIfNeeded();
+    };
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) void restoreSessionIfNeeded();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('pageshow', onPageShow);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('pageshow', onPageShow);
+    };
+  }, [hydrated, restoreSessionIfNeeded]);
 
   /** 액션 항목만 남기고 나머지 입력·사진 전부 제거 */
   function clearExcept(active: ActiveField) {
@@ -177,6 +235,14 @@ export function ProductCaptureApp() {
     }
     setResultImageUrl(imageUrl);
     setStep('result');
+    await saveAppSession(
+      buildAppSessionSnapshot({
+        result: data.scout,
+        visionInfo: data.vision ?? null,
+        manualKeyword: data.scout.productName,
+        hint,
+      }),
+    );
   }
 
   function reset() {
@@ -190,6 +256,7 @@ export function ProductCaptureApp() {
     setKiwiHint(null);
     setResultImageUrl(null);
     pendingImageDataUrlRef.current = null;
+    clearAppSession();
     setStep('capture');
     if (cameraRef.current) cameraRef.current.value = '';
     if (galleryRef.current) galleryRef.current.value = '';
@@ -313,6 +380,7 @@ export function ProductCaptureApp() {
               productName={result.productName}
               keyword={result.keyword}
               capturedImageUrl={resultImageUrl}
+              onBeforeLeaveApp={() => persistCurrentSession()}
               naverProductCount={
                 result.itemscoutMetricsAvailable
                   ? result.competitionByChannel?.find(c => c.channel === 'naver')?.productCount
@@ -413,6 +481,7 @@ export function ProductCaptureApp() {
                   type="button"
                   className="btn btn--link metrics-unavailable__link"
                   onClick={async () => {
+                    await persistCurrentSession();
                     const r = await openItemscoutInKiwi(result.productName, result.keyword);
                     if (!r.ok) setKiwiHint(r.message);
                     else setKiwiHint(isAndroidDevice() ? r.message : null);
@@ -448,6 +517,7 @@ export function ProductCaptureApp() {
                 type="button"
                 className="btn btn--link"
                 onClick={async () => {
+                  await persistCurrentSession();
                   const r = await openItemscoutInKiwi(result.productName, result.keyword);
                   if (!r.ok) setKiwiHint(r.message);
                   else if (isAndroidDevice()) setKiwiHint(r.message);

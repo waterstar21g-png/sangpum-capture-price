@@ -1,7 +1,5 @@
 const STORAGE_KEY = 'sangpum-capture:input-store';
 const MAX_HISTORY = 50;
-
-/** 최근 검색 1건 — 키워드 + 상품명(full name) + 힌트 */
 export interface SearchHistoryEntry {
   keyword: string;
   productName: string;
@@ -128,12 +126,30 @@ export function loadInputStore(): InputStore {
   return readStore();
 }
 
+/** 로컬·서버 검색 이력 병합 (최신 searchedAt 우선, 최대 50건) */
+export function mergeSearchHistory(
+  primary: SearchHistoryEntry[],
+  secondary: SearchHistoryEntry[],
+): SearchHistoryEntry[] {
+  const map = new Map<string, SearchHistoryEntry>();
+  for (const entry of [...primary, ...secondary]) {
+    const key = entryDedupeKey(entry);
+    const existing = map.get(key);
+    if (!existing || entry.searchedAt.localeCompare(existing.searchedAt) > 0) {
+      map.set(key, entry);
+    }
+  }
+  return [...map.values()]
+    .sort((a, b) => b.searchedAt.localeCompare(a.searchedAt))
+    .slice(0, MAX_HISTORY);
+}
+
 export function saveInputDraft(hint: string, keyword: string): void {
   const store = readStore();
   writeStore({ ...store, hint, keyword });
 }
 
-/** 분석 성공 시 — 상품명(full)+키워드+힌트, 중복 제거·최신 맨 앞 */
+/** 분석 성공 시 — 상품명(full)+키워드+힌트, 중복 제거·최신 맨 앞 (로컬 + 서버 DB) */
 export function pushSearchHistory(entry: {
   keyword: string;
   productName: string;
@@ -156,6 +172,13 @@ export function pushSearchHistory(entry: {
   const rest = store.searchHistory.filter(e => entryDedupeKey(e) !== key);
   const next = [newEntry, ...rest].slice(0, MAX_HISTORY);
   writeStore({ ...store, searchHistory: next });
+
+  if (typeof window !== 'undefined') {
+    void import('@/lib/server-storage-client').then(({ pushServerKeyword }) =>
+      pushServerKeyword(newEntry),
+    );
+  }
+
   return next;
 }
 

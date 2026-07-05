@@ -1,4 +1,9 @@
-/** 카메라·갤러리 상품 이미지 — 브라우저 IndexedDB 보관 (상품명 기준 조회) */
+/** 카메라·갤러리 상품 이미지 — 서버 DB 우선, IndexedDB 로컬 폴백 */
+
+import {
+  fetchServerProductImage,
+  saveServerProductImageClient,
+} from '@/lib/server-storage-client';
 
 const DB_NAME = 'sangpum-capture-product-images';
 const DB_VERSION = 1;
@@ -65,43 +70,61 @@ async function trimOldImages(db: IDBDatabase): Promise<void> {
   await idbTransactionDone(delTx);
 }
 
-/** 분석 성공 상품명 기준으로 이미지 저장 (동일 상품명은 덮어씀) */
+async function saveProductImageLocal(productName: string, dataUrl: string): Promise<void> {
+  const name = productName.trim();
+  if (!name || !dataUrl) return;
+
+  const db = await openDb();
+  const record: ProductImageRecord = {
+    key: productImageKey(name),
+    productName: name,
+    dataUrl,
+    savedAt: new Date().toISOString(),
+  };
+  const tx = db.transaction(STORE_NAME, 'readwrite');
+  await idbRequest(tx.objectStore(STORE_NAME).put(record));
+  await idbTransactionDone(tx);
+  await trimOldImages(db);
+  db.close();
+}
+
+async function findProductImageLocal(productName: string): Promise<string | null> {
+  const name = productName.trim();
+  if (!name) return null;
+
+  const db = await openDb();
+  const tx = db.transaction(STORE_NAME, 'readonly');
+  const record = await idbRequest(
+    tx.objectStore(STORE_NAME).get(productImageKey(name)) as IDBRequest<ProductImageRecord | undefined>,
+  );
+  await idbTransactionDone(tx);
+  db.close();
+  return record?.dataUrl ?? null;
+}
+
+/** 분석 성공 상품명 기준으로 이미지 저장 (서버 DB + 로컬 폴백) */
 export async function saveProductImage(productName: string, dataUrl: string): Promise<void> {
   const name = productName.trim();
   if (!name || !dataUrl) return;
 
+  await saveServerProductImageClient(name, dataUrl);
   try {
-    const db = await openDb();
-    const record: ProductImageRecord = {
-      key: productImageKey(name),
-      productName: name,
-      dataUrl,
-      savedAt: new Date().toISOString(),
-    };
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    await idbRequest(tx.objectStore(STORE_NAME).put(record));
-    await idbTransactionDone(tx);
-    await trimOldImages(db);
-    db.close();
+    await saveProductImageLocal(name, dataUrl);
   } catch {
-    /* 저장 실패 시 앱 흐름은 유지 */
+    /* 로컬 저장 실패는 무시 */
   }
 }
 
-/** 검색 결과 상품명과 일치하는 저장 이미지 조회 */
+/** 검색 결과 상품명과 일치하는 저장 이미지 조회 (서버 우선) */
 export async function findProductImage(productName: string): Promise<string | null> {
   const name = productName.trim();
   if (!name) return null;
 
+  const server = await fetchServerProductImage(name);
+  if (server) return server;
+
   try {
-    const db = await openDb();
-    const tx = db.transaction(STORE_NAME, 'readonly');
-    const record = await idbRequest(
-      tx.objectStore(STORE_NAME).get(productImageKey(name)) as IDBRequest<ProductImageRecord | undefined>,
-    );
-    await idbTransactionDone(tx);
-    db.close();
-    return record?.dataUrl ?? null;
+    return await findProductImageLocal(name);
   } catch {
     return null;
   }

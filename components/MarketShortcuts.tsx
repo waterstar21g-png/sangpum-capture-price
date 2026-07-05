@@ -22,6 +22,8 @@ interface Props {
   naverProductCount?: number;
   naverMonthlySearches?: number;
   naverIntensity?: number;
+  /** 외부 앱·브라우저로 나가기 직전 메인 화면 스냅샷 저장 */
+  onBeforeLeaveApp?: () => void | Promise<void>;
 }
 
 export function MarketShortcuts({
@@ -31,6 +33,7 @@ export function MarketShortcuts({
   naverProductCount,
   naverMonthlySearches,
   naverIntensity,
+  onBeforeLeaveApp,
 }: Props) {
   const q: ShortcutQuery = {
     productName: productName.trim(),
@@ -74,6 +77,10 @@ export function MarketShortcuts({
 
   if (!searchText) return null;
 
+  async function beforeLeave() {
+    await onBeforeLeaveApp?.();
+  }
+
   async function openNaverShopping(e: React.MouseEvent) {
     e.preventDefault();
     setPreviewLoading(true);
@@ -115,6 +122,7 @@ export function MarketShortcuts({
     e.preventDefault();
     setBusy(true);
     setHint(null);
+    await beforeLeave();
 
     const result = await openItemscoutInKiwi(productName, keyword);
     setCopiedReady(result.copied);
@@ -125,12 +133,14 @@ export function MarketShortcuts({
 
   async function openNaver(e: React.MouseEvent) {
     e.preventDefault();
+    await beforeLeave();
     const r = openNaverShoppingSearch(searchText);
     setHint(r.message);
   }
 
   async function openCoupang(e: React.MouseEvent) {
     e.preventDefault();
+    await beforeLeave();
     const r = openCoupangSearch(searchText);
     setHint(r.message);
   }
@@ -277,6 +287,7 @@ export function MarketShortcuts({
               target="_blank"
               rel="noopener noreferrer"
               title={title}
+              onClick={() => void beforeLeave()}
             >
               <span className="shortcut__icon" style={{ background: site.color }} aria-hidden>
                 {site.mark}
